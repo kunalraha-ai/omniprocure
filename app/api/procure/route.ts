@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// ── Increase Next.js route timeout to 120s ─────────────────────────────────────
+export const maxDuration = 120;
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface SupplierResult {
   name: string;
@@ -11,102 +14,127 @@ interface SupplierResult {
   recommended?: boolean;
 }
 
-interface TinyfishResponse {
-  results?: Array<{
-    url?: string;
-    content?: string;
-    text?: string;
-  }>;
-}
+// ── Read Tinyfish SSE stream properly ─────────────────────────────────────────
+async function runTinyfishAgent(url: string, goal: string): Promise<string> {
+  const apiKey = process.env.TINYFISH_API_KEY!;
 
-// ── Mock fallback data (used when Tinyfish key missing or scrape fails) ────────
-function getMockSuppliers(partNumber: string): SupplierResult[] {
-  const seed = partNumber.charCodeAt(0) + partNumber.charCodeAt(1);
-  return [
-    {
-      name: "Mouser Electronics",
-      price: parseFloat((1.2 + (seed % 30) / 100).toFixed(3)),
-      currency: "USD",
-      stock: 12000 + (seed * 37) % 8000,
-      leadTime: "In Stock",
-      url: `https://www.mouser.in/c/?q=${encodeURIComponent(partNumber)}`,
-    },
-    {
-      name: "DigiKey",
-      price: parseFloat((1.35 + (seed % 25) / 100).toFixed(3)),
-      currency: "USD",
-      stock: 5000 + (seed * 53) % 6000,
-      leadTime: `${2 + (seed % 3)} weeks`,
-      url: `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(partNumber)}`,
-    },
-  ];
-}
+  console.log(`[Tinyfish] Starting agent for: ${url}`);
 
-// ── Tinyfish scrape ────────────────────────────────────────────────────────────
-async function scrapeWithTinyfish(partNumber: string): Promise<SupplierResult[]> {
-  const apiKey = process.env.TINYFISH_API_KEY;
-  if (!apiKey) {
-    console.warn("[OmniProcure] TINYFISH_API_KEY not set — using mock data");
-    return getMockSuppliers(partNumber);
+  const res = await fetch("https://agent.tinyfish.ai/v1/automation/run-sse", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+    },
+    body: JSON.stringify({
+      url,
+      goal,
+      proxy_config: { enabled: false },
+    }),
+    // No AbortSignal here — let Next.js maxDuration handle it
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Tinyfish HTTP ${res.status}: ${errText}`);
   }
 
-  const urls = [
-    `https://www.mouser.in/c/?q=${encodeURIComponent(partNumber)}`,
-    `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(partNumber)}`,
-  ];
+  // Read SSE stream chunk by chunk
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let lastResult = "";
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? ""; // keep incomplete last line
+
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const raw = line.slice(5).trim();
+      if (!raw || raw === "[DONE]") continue;
+
+      try {
+        const parsed = JSON.parse(raw);
+        console.log(`[Tinyfish] Event type:`, parsed.type ?? parsed.status ?? "unknown");
+
+        // Capture result from COMPLETE or final events
+        if (parsed.result !== undefined && parsed.result !== null) {
+          lastResult = typeof parsed.result === "string"
+            ? parsed.result
+            : JSON.stringify(parsed.result);
+        }
+
+        // Some versions send output directly
+        if (parsed.output !== undefined) {
+          lastResult = typeof parsed.output === "string"
+            ? parsed.output
+            : JSON.stringify(parsed.output);
+        }
+
+        // Check for failure
+        if (parsed.status === "FAILED" || parsed.type === "ERROR") {
+          throw new Error(`Tinyfish agent failed: ${parsed.message ?? "unknown"}`);
+        }
+      } catch (parseErr) {
+        // Not JSON — might be plain text result
+        if (raw.length > 5) lastResult = raw;
+      }
+    }
+  }
+
+  console.log(`[Tinyfish] Final result length: ${lastResult.length}`);
+  return lastResult;
+}
+
+// ── Scrape one supplier ────────────────────────────────────────────────────────
+async function scrapeSupplier(
+  supplierName: string,
+  supplierUrl: string,
+  partNumber: string
+): Promise<SupplierResult | null> {
+  const goal = `Find part number "${partNumber}" on this page. Extract the unit price and stock quantity. Return ONLY this JSON:
+{"found":true,"price":<number>,"stock":<number>,"leadTime":"<string>","currency":"USD"}
+If part not found, return: {"found":false}`;
 
   try {
-    const scrapeRes = await fetch("https://api.tinyfish.io/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        urls,
-        extract: {
-          price: "The unit price of the component in USD",
-          stock: "The available stock quantity as a number",
-          leadTime: "The delivery lead time or availability status",
-          partNumber: "The exact manufacturer part number",
-        },
-        render_js: true,
-        wait_for: ".price, [data-price], .availability",
-      }),
-      signal: AbortSignal.timeout(25000),
-    });
+    const raw = await runTinyfishAgent(supplierUrl, goal);
+    console.log(`[OmniProcure] ${supplierName} raw response:`, raw.slice(0, 500));
 
-    if (!scrapeRes.ok) {
-      console.warn(`[OmniProcure] Tinyfish returned ${scrapeRes.status} — falling back to mock`);
-      return getMockSuppliers(partNumber);
+    if (!raw) {
+      console.warn(`[OmniProcure] ${supplierName}: empty response`);
+      return null;
     }
 
-    const data: TinyfishResponse = await scrapeRes.json();
-    const results = data?.results ?? [];
+    // Extract JSON from response (handles cases where there's surrounding text)
+    const jsonMatch = raw.match(/\{[\s\S]*?\}/);
+    if (!jsonMatch) {
+      console.warn(`[OmniProcure] ${supplierName}: no JSON in response`);
+      return null;
+    }
 
-    if (!results.length) return getMockSuppliers(partNumber);
+    const data = JSON.parse(jsonMatch[0]);
 
-    // Map Tinyfish results to our SupplierResult shape
-    const supplierNames = ["Mouser Electronics", "DigiKey"];
-    return results.slice(0, 2).map((r, i) => {
-      // Try to extract structured fields from Tinyfish content
-      const content = r.content ?? r.text ?? "";
-      const priceMatch = content.match(/\$?([\d,]+\.?\d*)/);
-      const stockMatch = content.match(/(\d[\d,]*)\s*(in stock|units|pcs)/i);
-      const leadMatch = content.match(/(in stock|\d+\s*weeks?|\d+\s*days?)/i);
+    if (!data.found || data.price == null) {
+      console.log(`[OmniProcure] ${supplierName}: part not found`);
+      return null;
+    }
 
-      return {
-        name: supplierNames[i] ?? `Supplier ${i + 1}`,
-        price: priceMatch ? parseFloat(priceMatch[1].replace(",", "")) : getMockSuppliers(partNumber)[i].price,
-        currency: "USD",
-        stock: stockMatch ? parseInt(stockMatch[1].replace(",", ""), 10) : getMockSuppliers(partNumber)[i].stock,
-        leadTime: leadMatch ? leadMatch[1] : getMockSuppliers(partNumber)[i].leadTime,
-        url: urls[i],
-      };
-    });
+    return {
+      name: supplierName,
+      price: parseFloat(String(data.price).replace(/[^0-9.]/g, "")),
+      currency: data.currency ?? "USD",
+      stock: parseInt(String(data.stock ?? "0").replace(/[^0-9]/g, "")) || 0,
+      leadTime: data.leadTime ?? "Contact supplier",
+      url: supplierUrl,
+    };
   } catch (err) {
-    console.error("[OmniProcure] Tinyfish error:", err);
-    return getMockSuppliers(partNumber);
+    console.error(`[OmniProcure] ${supplierName} error:`, err);
+    return null;
   }
 }
 
@@ -117,31 +145,30 @@ async function analyzeWithClaude(
 ): Promise<{ winner: string; reason: string; recommendedIndex: number }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!apiKey) {
-    console.warn("[OmniProcure] ANTHROPIC_API_KEY not set — using rule-based fallback");
+  // Rule-based fallback
+  const fallback = () => {
     const bestIdx = suppliers.reduce((bi, s, i) => s.price < suppliers[bi].price ? i : bi, 0);
     return {
       winner: suppliers[bestIdx].name,
-      reason: `${suppliers[bestIdx].name} offers the lowest unit price at $${suppliers[bestIdx].price.toFixed(3)} with ${suppliers[bestIdx].stock.toLocaleString()} units in stock.`,
+      reason: `${suppliers[bestIdx].name} offers the lowest unit price at $${suppliers[bestIdx].price.toFixed(3)}.`,
       recommendedIndex: bestIdx,
     };
-  }
+  };
 
-  const prompt = `You are a senior procurement analyst AI. Analyze these supplier quotes for part number "${partNumber}" and select the best supplier.
+  if (!apiKey) return fallback();
 
-Supplier data:
+  const prompt = `You are a senior procurement analyst. Analyze these real-time supplier quotes for electronic component "${partNumber}" and select the best supplier.
+
+Data:
 ${JSON.stringify(suppliers, null, 2)}
 
-Evaluate based on:
-1. Lowest unit price (primary factor, weight 60%)
-2. Stock availability (secondary factor, weight 30%)
-3. Lead time (tertiary factor, weight 10%)
+Scoring weights: price 60%, stock availability 30%, lead time 10%.
 
-Respond with ONLY a valid JSON object in this exact format, no markdown, no explanation:
+Respond with ONLY valid JSON, no markdown, no explanation:
 {
-  "winner": "<supplier name>",
+  "winner": "<exact supplier name>",
   "recommendedIndex": <0 or 1>,
-  "reason": "<one concise sentence explaining the recommendation, max 120 chars>"
+  "reason": "<one sentence under 120 chars>"
 }`;
 
   try {
@@ -153,38 +180,28 @@ Respond with ONLY a valid JSON object in this exact format, no markdown, no expl
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-sonnet-4-5",
         max_tokens: 256,
         messages: [{ role: "user", content: prompt }],
       }),
-      signal: AbortSignal.timeout(20000),
     });
 
-    if (!claudeRes.ok) {
-      throw new Error(`Anthropic API returned ${claudeRes.status}`);
-    }
+    if (!claudeRes.ok) throw new Error(`Claude ${claudeRes.status}`);
 
     const claudeData = await claudeRes.json();
     const text = claudeData?.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON in Claude response");
 
-    // Strip any accidental markdown fences
-    const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
-
+    const parsed = JSON.parse(jsonMatch[0]);
     return {
       winner: parsed.winner ?? suppliers[0].name,
       reason: parsed.reason ?? "Best overall value.",
       recommendedIndex: typeof parsed.recommendedIndex === "number" ? parsed.recommendedIndex : 0,
     };
   } catch (err) {
-    console.error("[OmniProcure] Claude analysis error:", err);
-    // Rule-based fallback
-    const bestIdx = suppliers.reduce((bi, s, i) => s.price < suppliers[bi].price ? i : bi, 0);
-    return {
-      winner: suppliers[bestIdx].name,
-      reason: `${suppliers[bestIdx].name} provides the best price-to-availability ratio.`,
-      recommendedIndex: bestIdx,
-    };
+    console.error("[OmniProcure] Claude error:", err);
+    return fallback();
   }
 }
 
@@ -198,17 +215,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "partNumber is required" }, { status: 400 });
     }
 
-    // Step 1 — scrape suppliers via Tinyfish
-    const suppliers = await scrapeWithTinyfish(partNumber);
+    console.log(`\n[OmniProcure] ═══ Searching: ${partNumber} ═══`);
 
-    // Step 2 — analyse with Claude
-    const analysis = await analyzeWithClaude(partNumber, suppliers);
+    // Scrape both suppliers in parallel using direct search URLs
+    const [mouserResult, digikeyResult] = await Promise.all([
+      scrapeSupplier(
+        "Mouser Electronics",
+        `https://www.mouser.com/Search/Refine?Keyword=${encodeURIComponent(partNumber)}`,
+        partNumber
+      ),
+      scrapeSupplier(
+        "DigiKey",
+        `https://www.digikey.com/en/products/result?keywords=${encodeURIComponent(partNumber)}`,
+        partNumber
+      ),
+    ]);
 
-    // Step 3 — tag recommended supplier
-    const taggedSuppliers = suppliers.map((s, i) => ({
+    const validSuppliers = [mouserResult, digikeyResult].filter(Boolean) as SupplierResult[];
+
+    // Neither found — return not found
+    if (validSuppliers.length === 0) {
+      console.log(`[OmniProcure] ✗ Not found on either supplier`);
+      return NextResponse.json({ notFound: true, partNumber });
+    }
+
+    // Only one found
+    if (validSuppliers.length === 1) {
+      const only = { ...validSuppliers[0], recommended: true };
+      return NextResponse.json({
+        partNumber,
+        suppliers: [only],
+        recommendation: {
+          winner: only.name,
+          reason: `Only ${only.name} currently has this part in stock.`,
+        },
+      });
+    }
+
+    // Both found — Claude picks the winner
+    const analysis = await analyzeWithClaude(partNumber, validSuppliers);
+    const taggedSuppliers = validSuppliers.map((s, i) => ({
       ...s,
       recommended: i === analysis.recommendedIndex,
     }));
+
+    console.log(`[OmniProcure] ✓ Winner: ${analysis.winner}`);
 
     return NextResponse.json({
       partNumber,
@@ -219,7 +270,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    console.error("[OmniProcure] /api/procure error:", err);
+    console.error("[OmniProcure] Fatal:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }

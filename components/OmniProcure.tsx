@@ -167,26 +167,82 @@ export default function OmniProcure() {
     setResults(null);
     setError(null);
 
-    for (let i = 0; i < TERMINAL_LINES.length; i++) {
-      await new Promise(r => setTimeout(r, 380 + Math.random() * 220));
-      setTerminalLines(prev => [...prev, TERMINAL_LINES[i]]);
+    const WAITING_LINES = [
+      "> Initializing Tinyfish Agent...",
+      "> Authenticating session tokens...",
+      "> Bypassing bot protections on DigiKey & Mouser...",
+      "> Dispatching parallel scrape workers [2x]...",
+      "> Extracting pricing JSON from supplier endpoints...",
+      "> Normalizing currency & lead-time fields...",
+      "> Running Claude 3.5 Sonnet analysis...",
+      "> Ranking suppliers by price x availability score...",
+    ];
+
+    const LOOPING_LINES = [
+      "> Waiting for Mouser agent response...",
+      "> Waiting for DigiKey agent response...",
+      "> Agents still browsing live pages...",
+      "> Processing supplier data...",
+      "> Cross-referencing stock levels...",
+      "> Validating pricing data...",
+      "> Almost there...",
+    ];
+
+    let apiDone = false;
+    let apiResult: any = null;
+    let apiError: string | null = null;
+
+    // Fire API call immediately — don't wait for it
+    const apiPromise = fetch("/api/procure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partNumber: part.part }),
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        return res.json();
+      })
+      .then(data => { apiResult = data; })
+      .catch(err => { apiError = err instanceof Error ? err.message : "Unknown error"; })
+      .finally(() => { apiDone = true; });
+
+    // Print first batch of lines while API runs
+    for (let i = 0; i < WAITING_LINES.length; i++) {
+      if (apiDone) break;
+      await new Promise(r => setTimeout(r, 500 + Math.random() * 300));
+      setTerminalLines(prev => [...prev, WAITING_LINES[i]]);
     }
 
-    try {
-      const res = await fetch("/api/procure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partNumber: part.part }),
-      });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      const data: ProcureResult = await res.json();
-      await new Promise(r => setTimeout(r, 400));
-      setResults(data);
-      setPhase("results");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-      setPhase("results");
+    // Keep looping lines until API finishes
+    let loopIdx = 0;
+    while (!apiDone) {
+      await new Promise(r => setTimeout(r, 900 + Math.random() * 400));
+      if (apiDone) break;
+      setTerminalLines(prev => [...prev, LOOPING_LINES[loopIdx % LOOPING_LINES.length]]);
+      loopIdx++;
     }
+
+    await apiPromise;
+
+    setTerminalLines(prev => [...prev, "> Done. Generating recommendation..."]);
+    await new Promise(r => setTimeout(r, 400));
+    setTerminalLines(prev => [...prev, "> Analysis complete."]);
+    await new Promise(r => setTimeout(r, 500));
+
+    if (apiError) {
+      setError(apiError);
+      setPhase("results");
+      return;
+    }
+
+    if (apiResult?.notFound) {
+      setError(`"${part.part}" was not found on Mouser or DigiKey. Please verify the MPN and try again.`);
+      setPhase("results");
+      return;
+    }
+
+    setResults(apiResult as ProcureResult);
+    setPhase("results");
   }, []);
 
   // ── Handle Enter key — defined AFTER runSequence ────────────────────────────
@@ -538,10 +594,19 @@ export default function OmniProcure() {
           </div>
         )}
 
-        {/* Error state */}
+        {/* Error / Not Found state */}
         {phase === "results" && error && (
-          <div className="w-full max-w-2xl mt-6 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-4 text-red-400 text-sm font-mono">
-            ✗ {error}
+          <div className="w-full max-w-2xl mt-6 bg-red-500/10 border border-red-500/20 rounded-xl px-5 py-5 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <X size={16} className="text-red-400" />
+            </div>
+            <div>
+              <div className="text-red-400 font-semibold text-sm mb-1">Part Not Found</div>
+              <div className="text-zinc-400 text-sm">{error}</div>
+              <button onClick={reset} className="mt-3 text-xs text-zinc-500 hover:text-white underline transition-colors">
+                Search again
+              </button>
+            </div>
           </div>
         )}
 
