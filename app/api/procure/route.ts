@@ -180,7 +180,7 @@ Respond with ONLY valid JSON, no markdown, no explanation:
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-4-6",
         max_tokens: 256,
         messages: [{ role: "user", content: prompt }],
       }),

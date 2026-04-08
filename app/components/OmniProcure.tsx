@@ -22,6 +22,9 @@ interface ProcureResult {
   suppliers: SupplierResult[];
   recommendation: { winner: string; reason: string; };
 }
+
+interface AliasItem { mpn: string; description: string; }
+
 interface HistoryItem {
   id: string;
   part_number: string;
@@ -37,6 +40,7 @@ const FALLBACK_CATALOG: CatalogItem[] = [
   { part: "TPS63020DSJR", desc: "Buck-Boost Converter, 1.8A, 96% Eff." },
 ];
 
+// ── Singleton Supabase client ──────────────────────────────────────────────────
 const getSupabase = (() => {
   let instance: ReturnType<typeof createClient> | null = null;
   return () => {
@@ -68,7 +72,7 @@ const WAITING_LINES = [
   "Dispatching parallel scrape workers...",
   "Extracting pricing from supplier endpoints...",
   "Normalizing currency & lead-time fields...",
-  "Running Claude analysis...",
+  "Running Claude 3.5 Sonnet analysis...",
   "Ranking suppliers by price & availability...",
 ];
 
@@ -81,35 +85,6 @@ const LOOPING_LINES = [
   "Validating pricing data...",
   "Almost there...",
 ];
-
-// ── Atom Logo ──────────────────────────────────────────────────────────────────
-function AtomLogo({ size = 30 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#al1)" strokeWidth="3.5" fill="none"/>
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#al2)" strokeWidth="3.5" fill="none" transform="rotate(60 50 50)"/>
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#al3)" strokeWidth="3.5" fill="none" transform="rotate(120 50 50)"/>
-      <circle cx="50" cy="50" r="9" fill="url(#alC)"/>
-      <circle cx="95" cy="50" r="4.5" fill="#60a5fa"/>
-      <circle cx="27.5" cy="25.5" r="4.5" fill="#818cf8"/>
-      <circle cx="27.5" cy="74.5" r="4.5" fill="#6366f1"/>
-      <defs>
-        <linearGradient id="al1" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#818cf8"/><stop offset="1" stopColor="#60a5fa"/>
-        </linearGradient>
-        <linearGradient id="al2" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6366f1"/><stop offset="1" stopColor="#38bdf8"/>
-        </linearGradient>
-        <linearGradient id="al3" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#a78bfa"/><stop offset="1" stopColor="#60a5fa"/>
-        </linearGradient>
-        <radialGradient id="alC" cx="50%" cy="50%" r="50%">
-          <stop stopColor="#60a5fa"/><stop offset="1" stopColor="#6366f1"/>
-        </radialGradient>
-      </defs>
-    </svg>
-  );
-}
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -128,7 +103,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 // ── Toggle ─────────────────────────────────────────────────────────────────────
 function Toggle({ enabled }: { enabled: boolean }) {
   return (
-    <div className="relative w-9 h-5 rounded-full transition-colors duration-200"
+    <div className={`relative w-9 h-5 rounded-full transition-colors duration-200`}
       style={{ background: enabled ? "#4a6fa5" : "#e2e8f0" }}>
       <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${enabled ? "translate-x-4" : "translate-x-0.5"}`} />
     </div>
@@ -155,21 +130,26 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         setError("Check your email to confirm your account.");
-        setLoading(false); return;
+        setLoading(false);
+        return;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-      onSuccess(); onClose();
+      onSuccess();
+      onClose();
     } catch (err: any) {
       setError(err.message ?? "Something went wrong");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogle = async () => {
@@ -182,92 +162,135 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     if (error) { setError(error.message); setGoogleLoading(false); }
   };
 
+  const handleGuest = () => { onClose(); };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(15,23,42,0.45)" }} onClick={onClose} />
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 backdrop-blur-sm"
+        style={{ background: "rgba(15,23,42,0.4)" }}
+        onClick={onClose}
+      />
+
+      {/* Modal */}
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-fade-in">
-        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#818cf8,#4a6fa5,#60a5fa)" }} />
+
+        {/* Top gradient bar */}
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#7b9cc4,#4a6fa5,#dde8f8)" }} />
+
         <div className="px-8 pt-8 pb-8">
+          {/* Header */}
           <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors">
             <X size={18} />
           </button>
+
           <div className="mb-7 text-center">
-            <div className="flex justify-center mb-4"><AtomLogo size={48} /></div>
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-md" style={{ background: "linear-gradient(135deg,#dde8f8,#7b9cc4)" }}>
+              <Package size={22} style={{ color: "#1e2d4a" }} />
+            </div>
             <h2 className="text-xl font-bold text-slate-900 mb-1">
-              {mode === "signin" ? "Welcome back" : "Join OmniProcure"}
+              {mode === "signin" ? "Welcome back" : "Create account"}
             </h2>
             <p className="text-sm text-slate-500">
-              {mode === "signin"
-                ? "Sign in to generate Purchase Orders & track history"
-                : "Start sourcing smarter with AI-powered procurement"}
+              {mode === "signin" ? "Sign in to generate Purchase Orders" : "Start sourcing smarter today"}
             </p>
           </div>
 
-          <button onClick={handleGoogle} disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl py-3 text-sm font-semibold text-slate-700 transition-all hover:shadow-sm mb-4 disabled:opacity-60">
+          {/* Google */}
+          <button
+            onClick={handleGoogle}
+            disabled={googleLoading}
+            className="w-full flex items-center justify-center gap-3 border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl py-3 text-sm font-semibold text-slate-700 transition-all hover:shadow-sm mb-4 disabled:opacity-60"
+          >
             {googleLoading ? <Loader2 size={16} className="animate-spin" /> : (
               <svg width="18" height="18" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
             )}
             Continue with Google
           </button>
 
+          {/* Divider */}
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px bg-slate-100" />
             <span className="text-xs text-slate-400 font-medium">or</span>
             <div className="flex-1 h-px bg-slate-100" />
           </div>
 
+          {/* Email form */}
           <form onSubmit={handleEmail} className="space-y-3">
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Email</label>
               <div className="flex items-center gap-2 border-2 border-slate-200 focus-within:border-[#7b9cc4] rounded-xl px-3 py-2.5 transition-colors">
                 <Mail size={14} className="text-slate-400 shrink-0" />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="you@company.com" required
-                  className="flex-1 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  required
+                  className="flex-1 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent"
+                />
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Password</label>
               <div className="flex items-center gap-2 border-2 border-slate-200 focus-within:border-[#7b9cc4] rounded-xl px-3 py-2.5 transition-colors">
                 <Lock size={14} className="text-slate-400 shrink-0" />
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••" required
-                  className="flex-1 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="flex-1 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent"
+                />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-slate-400 hover:text-slate-600 transition-colors">
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
             </div>
+
             {error && (
               <div className={`text-xs px-3 py-2 rounded-lg ${error.includes("Check your email") ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-red-50 text-red-500 border border-red-100"}`}>
                 {error}
               </div>
             )}
-            <button type="submit" disabled={loading}
+
+            <button
+              type="submit"
+              disabled={loading}
               className="w-full py-3 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background: "linear-gradient(135deg,#4a6fa5,#6366f1)" }}>
+              style={{ background: "#4a6fa5" }}
+            >
               {loading ? <Loader2 size={15} className="animate-spin" /> : null}
               {mode === "signin" ? "Sign in" : "Create account"}
             </button>
           </form>
 
+          {/* Switch mode */}
           <div className="mt-4 text-center">
-            <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
-              className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+            <button
+              onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
+              className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            >
               {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
               <span style={{ color: "#4a6fa5" }} className="font-semibold">
                 {mode === "signin" ? "Sign up" : "Sign in"}
               </span>
             </button>
           </div>
+
+          {/* Guest divider */}
           <div className="mt-5 pt-5 border-t border-slate-100 text-center">
-            <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+            <button
+              onClick={handleGuest}
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+            >
               Continue as guest — search only, no PO generation
             </button>
           </div>
@@ -294,10 +317,12 @@ export default function OmniProcure() {
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [searchHistory, setSearchHistory] = useState<HistoryItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
+  // Auth state listener
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); return; }
     supabase.auth.getSession().then(({ data }) => {
@@ -310,25 +335,33 @@ export default function OmniProcure() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Load search history
   const loadHistory = useCallback(async () => {
     if (!supabase || !user) { setSearchHistory([]); return; }
     try {
-      const { data } = await supabase.from("search_history").select("id, part_number, searched_at")
-        .eq("user_id", user.id).order("searched_at", { ascending: false });
+      const { data } = await supabase
+        .from("search_history")
+        .select("id, part_number, searched_at")
+        .eq("user_id", user.id)
+        .order("searched_at", { ascending: false });
       setSearchHistory(data as HistoryItem[] ?? []);
     } catch { setSearchHistory([]); }
   }, [user]);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
+  // Close history dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (historyRef.current && !historyRef.current.contains(e.target as Node)) setHistoryOpen(false);
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setHistoryOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Load catalog
   useEffect(() => {
     async function loadCatalog() {
       if (!supabase) { setCatalog(FALLBACK_CATALOG); return; }
@@ -341,12 +374,14 @@ export default function OmniProcure() {
     loadCatalog();
   }, []);
 
+  // Filter suggestions
   useEffect(() => {
     if (!query.trim() || selectedPart) { setSuggestions([]); return; }
     const q = query.toLowerCase();
     setSuggestions(catalog.filter(c => c.part.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)).slice(0, 6));
   }, [query, catalog, selectedPart]);
 
+  // Sign out
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -354,6 +389,7 @@ export default function OmniProcure() {
     setToast("Signed out successfully");
   };
 
+  // Save to history
   const saveToHistory = useCallback(async (partNumber: string) => {
     if (!supabase || !user) return;
     try {
@@ -362,6 +398,7 @@ export default function OmniProcure() {
     } catch {}
   }, [user, loadHistory]);
 
+  // Clear all history
   const clearHistory = useCallback(async () => {
     if (!supabase || !user) return;
     try {
@@ -370,6 +407,7 @@ export default function OmniProcure() {
     } catch {}
   }, [user]);
 
+  // Delete single history item
   const deleteHistoryItem = useCallback(async (id: string) => {
     if (!supabase) return;
     try {
@@ -378,13 +416,21 @@ export default function OmniProcure() {
     } catch {}
   }, []);
 
+  // Run sequence
   const runSequence = useCallback(async (part: CatalogItem) => {
-    setSelectedPart(part); setQuery(part.part); setSuggestions([]);
-    setPhase("loading"); setStatusLines([]);
+    setSelectedPart(part);
+    setQuery(part.part);
+    setSuggestions([]);
+    setPhase("loading");
+    setStatusLines([]);
     setCurrentStatus("Initializing Tinyfish Agent...");
-    setResults(null); setError(null);
+    setResults(null);
+    setError(null);
+    setAliases([]);
 
-    let apiDone = false, apiResult: any = null, apiError: string | null = null;
+    let apiDone = false;
+    let apiResult: any = null;
+    let apiError: string | null = null;
 
     const apiPromise = fetch("/api/procure", {
       method: "POST",
@@ -402,6 +448,7 @@ export default function OmniProcure() {
       setStatusLines(prev => i > 0 ? [...prev, WAITING_LINES[i - 1]] : prev);
       await new Promise(r => setTimeout(r, 500 + Math.random() * 300));
     }
+
     let loopIdx = 0;
     while (!apiDone) {
       await new Promise(r => setTimeout(r, 900 + Math.random() * 400));
@@ -416,23 +463,38 @@ export default function OmniProcure() {
 
     if (apiError) { setError(apiError); setPhase("results"); return; }
     if (apiResult?.notFound) {
-      setError(`"${part.part}" was not found on Mouser or DigiKey. Please verify the MPN and try again.`);
-      setPhase("results"); return;
+      setError(`"${part.part}" was not found on Mouser or DigiKey.`);
+      if (apiResult.aliases?.length) setAliases(apiResult.aliases);
+      setPhase("results");
+      return;
     }
     setResults(apiResult as ProcureResult);
     setPhase("results");
     saveToHistory(part.part);
-  }, [saveToHistory]);
+  }, []);
 
+  // Handle Enter key
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && query.trim() && !selectedPart)
+    if (e.key === "Enter" && query.trim() && !selectedPart) {
       runSequence({ part: query.trim().toUpperCase(), desc: "Custom MPN search" });
+    }
   }, [query, selectedPart, runSequence]);
 
+  // PDF — triggers auth modal for guests
+  const handlePDFClick = useCallback(() => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    generatePDF();
+  }, [user, results]);
+
+  // PDF generation
   const generatePDF = useCallback(async () => {
     if (!results) return;
     const { default: jsPDF } = await import("jspdf");
     const { default: autoTable } = await import("jspdf-autotable");
+
     const winner = results.suppliers.find(s => s.recommended) || results.suppliers[0];
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const poNumber = `PO-${Date.now().toString().slice(-8)}`;
@@ -442,7 +504,7 @@ export default function OmniProcure() {
     doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.setFont("helvetica", "bold");
     doc.text("OMNIPROCURE", 14, 18);
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(148, 163, 184);
-    doc.text("Autonomous B2B Procurement Platform", 14, 26);
+    doc.text("Intelligent B2B Procurement Platform", 14, 26);
     doc.setTextColor(255, 255, 255); doc.setFontSize(14); doc.setFont("helvetica", "bold");
     doc.text("PURCHASE ORDER", 196, 18, { align: "right" });
     doc.setFontSize(10); doc.setFont("helvetica", "normal");
@@ -490,27 +552,22 @@ export default function OmniProcure() {
 
     doc.setFillColor(74, 111, 165); doc.roundedRect(14, finalY, 90, 18, 2, 2, "F");
     doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("helvetica", "bold");
-    doc.text("CLAUDE AI RECOMMENDED SUPPLIER", 17, finalY + 7);
+    doc.text("CLAUDE RECOMMENDED SUPPLIER", 17, finalY + 7);
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
     doc.text(results.recommendation.reason.slice(0, 60), 17, finalY + 13);
 
     doc.setFillColor(248, 250, 252); doc.rect(0, 270, 210, 27, "F");
     doc.setTextColor(148, 163, 184); doc.setFontSize(7.5); doc.setFont("helvetica", "normal");
     doc.text("Auto-generated by OmniProcure AI. Verify pricing before submission.", 105, 278, { align: "center" });
-    doc.text("OmniProcure · Powered by Tinyfish + Claude AI · omniprocure.ai", 105, 284, { align: "center" });
+    doc.text("OmniProcure · Tinyfish Hackathon 2025 · omniprocure.ai", 105, 284, { align: "center" });
 
     doc.save(`Purchase_Order_${results.partNumber}.pdf`);
     setToast("PO Generated Successfully");
   }, [results]);
 
-  const handlePDFClick = useCallback(() => {
-    if (!user) { setShowAuthModal(true); return; }
-    generatePDF();
-  }, [user, generatePDF]);
-
   const reset = () => {
     setQuery(""); setSelectedPart(null); setPhase("idle");
-    setStatusLines([]); setResults(null); setError(null);
+    setStatusLines([]); setResults(null); setError(null); setAliases([]);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
@@ -519,6 +576,7 @@ export default function OmniProcure() {
   return (
     <div className="min-h-screen font-sans" style={{ fontFamily: "var(--font-geist), system-ui, sans-serif" }}>
 
+      {/* Auth Modal */}
       {showAuthModal && (
         <AuthModal
           onClose={() => setShowAuthModal(false)}
@@ -527,27 +585,22 @@ export default function OmniProcure() {
       )}
 
       {/* ── Navbar ── */}
-      <nav className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-slate-100/80 bg-white/95 backdrop-blur-xl flex items-center justify-between px-6 shadow-sm">
-
-        {/* Left: Logo + wordmark */}
+      <nav className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-slate-100 bg-white/90 backdrop-blur-xl flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <AtomLogo size={30} />
-          <span className="font-bold text-[16px] tracking-tight text-slate-900">OmniProcure</span>
-          <span className="hidden sm:block text-slate-200 text-sm mx-1">|</span>
-          <span className="hidden sm:block text-slate-400 text-xs font-medium tracking-wide">Command Center</span>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm" style={{ background: "#4a6fa5" }}>
+            <Package size={14} className="text-white" />
+          </div>
+          <span className="font-bold text-[15px] tracking-tight text-slate-900">OmniProcure</span>
+          <span className="text-slate-300 text-xs mx-1">|</span>
+          <span className="text-slate-400 text-xs font-medium">Command Center</span>
         </div>
-
-        {/* Right: Status + Auth + Settings */}
-        <div className="flex items-center gap-3">
-
-          {/* Live badge */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full"
-            style={{ background: "rgba(220,252,231,0.7)", border: "1px solid rgba(134,239,172,0.5)" }}>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span className="text-xs text-emerald-700 font-semibold">Live: Operational</span>
+            <span className="text-xs text-emerald-600 font-medium">Live: Operational</span>
           </div>
 
           {/* Auth area */}
@@ -556,28 +609,26 @@ export default function OmniProcure() {
           ) : user ? (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                  style={{ background: "linear-gradient(135deg,#6366f1,#4a6fa5)" }}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: "#4a6fa5" }}>
                   {userInitials}
                 </div>
-                <span className="text-xs text-slate-600 font-medium max-w-[130px] truncate">{user.email}</span>
+                <span className="text-xs text-slate-600 font-medium max-w-[120px] truncate">{user.email}</span>
               </div>
-              <button onClick={handleSignOut}
-                className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all"
-                title="Sign out">
-                <LogOut size={13} className="text-slate-400" />
+              <button onClick={handleSignOut} className="w-7 h-7 rounded-lg border border-slate-200 hover:bg-red-50 hover:border-red-200 flex items-center justify-center transition-all">
+                <LogOut size={13} className="text-slate-400 hover:text-red-400" />
               </button>
             </div>
           ) : (
-            <button onClick={() => setShowAuthModal(true)}
-              className="text-xs font-semibold text-white px-4 py-2 rounded-xl transition-all shadow-sm hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,#4a6fa5,#6366f1)" }}>
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="text-xs font-semibold text-white px-4 py-1.5 rounded-xl transition-all shadow-sm"
+              style={{ background: "#4a6fa5" }}
+            >
               Sign in
             </button>
           )}
 
-          <button onClick={() => setSettingsOpen(true)}
-            className="w-8 h-8 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center transition-all">
+          <button onClick={() => setSettingsOpen(true)} className="w-8 h-8 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center transition-all">
             <Settings size={15} className="text-slate-400" />
           </button>
         </div>
@@ -585,28 +636,23 @@ export default function OmniProcure() {
 
       {/* ── Main ── */}
       <main
-        className="pt-16 min-h-screen flex flex-col items-center px-4"
+        className="pt-14 min-h-screen flex flex-col items-center px-4"
         style={{ backgroundColor: "#f1f4f8", backgroundImage: "radial-gradient(circle,#94a3b8 1.2px,transparent 1.2px)", backgroundSize: "22px 22px" }}
       >
-
         {/* Hero */}
         <div className="mt-20 mb-14 text-center">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full mb-6"
-            style={{ background: "#dde8f8", border: "1px solid #c8d8f0", color: "#4a6fa5" }}>
+          <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full mb-6" style={{ background: "#dde8f8", border: "1px solid #c8d8f0", color: "#4a6fa5" }}>
             <Zap size={11} />
-            Powered by Tinyfish + Claude AI
+            Powered by Tinyfish + Claude 3.5 Sonnet
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-slate-900 mb-3">
-            Autonomous Parts Sourcing
-          </h1>
+          <h1 className="text-4xl font-bold tracking-tight text-slate-900 mb-3">Intelligent Parts Procurement</h1>
           <p className="text-slate-500 text-sm max-w-md mx-auto leading-relaxed">
-            Enter a Manufacturer Part Number. Our AI agents instantly browse Mouser & DigiKey live, compare pricing and stock, and Claude picks the winner.
+            Enter a Manufacturer Part Number to instantly source and compare live pricing from Mouser and DigiKey, analyzed by AI.
           </p>
           {!user && !authLoading && (
             <p className="text-xs text-slate-400 mt-3">
-              Search is free.{" "}
-              <button onClick={() => setShowAuthModal(true)}
-                className="font-semibold underline underline-offset-2" style={{ color: "#4a6fa5" }}>
+              Searching is free.{" "}
+              <button onClick={() => setShowAuthModal(true)} className="font-semibold underline underline-offset-2 transition-colors" style={{ color: "#4a6fa5" }}>
                 Sign in
               </button>{" "}
               to generate Purchase Orders.
@@ -644,7 +690,8 @@ export default function OmniProcure() {
               <button
                 onClick={() => setHistoryOpen(h => !h)}
                 className={`ml-1 w-8 h-8 rounded-lg border flex items-center justify-center transition-all shrink-0 ${historyOpen ? "border-[#7b9cc4] bg-[#dde8f8]" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"}`}
-                title="Search history">
+                title="Search history"
+              >
                 <History size={14} style={{ color: historyOpen ? "#4a6fa5" : "#94a3b8" }} />
               </button>
             )}
@@ -656,12 +703,13 @@ export default function OmniProcure() {
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <History size={13} style={{ color: "#4a6fa5" }} />
-                  <span className="text-xs font-bold text-slate-700">Recent Searches</span>
+                  <span className="text-xs font-bold text-slate-700">Search History</span>
                   <span className="text-xs text-slate-400">({searchHistory.length})</span>
                 </div>
                 {searchHistory.length > 0 && (
                   <button onClick={clearHistory} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors font-medium">
-                    <Trash2 size={11} />Clear all
+                    <Trash2 size={11} />
+                    Clear all
                   </button>
                 )}
               </div>
@@ -671,8 +719,10 @@ export default function OmniProcure() {
                 <div className="max-h-72 overflow-y-auto">
                   {searchHistory.map((item) => (
                     <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors group border-b border-slate-50 last:border-0">
-                      <button className="flex items-center gap-3 flex-1 text-left"
-                        onClick={() => { setHistoryOpen(false); runSequence({ part: item.part_number, desc: "From history" }); }}>
+                      <button
+                        className="flex items-center gap-3 flex-1 text-left"
+                        onClick={() => { setHistoryOpen(false); runSequence({ part: item.part_number, desc: "From history" }); }}
+                      >
                         <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#dde8f8", border: "1px solid #c8d8f0" }}>
                           <RotateCcw size={12} style={{ color: "#4a6fa5" }} />
                         </div>
@@ -681,7 +731,10 @@ export default function OmniProcure() {
                           <div className="text-xs text-slate-400">{new Date(item.searched_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
                         </div>
                       </button>
-                      <button onClick={() => deleteHistoryItem(item.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-400">
+                      <button
+                        onClick={() => deleteHistoryItem(item.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-400"
+                      >
                         <X size={13} />
                       </button>
                     </div>
@@ -691,7 +744,7 @@ export default function OmniProcure() {
             </div>
           )}
 
-          {/* Suggestions dropdown */}
+          {/* Suggestions Dropdown */}
           {query.trim() && !selectedPart && (
             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xl z-30">
               {suggestions.map((item, i) => (
@@ -707,14 +760,15 @@ export default function OmniProcure() {
                   <ChevronRight size={14} className="text-slate-300 ml-auto" />
                 </button>
               ))}
-              <button onClick={() => runSequence({ part: query.trim().toUpperCase(), desc: "Custom MPN search" })}
+              <button
+                onClick={() => runSequence({ part: query.trim().toUpperCase(), desc: "Custom MPN search" })}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors text-left border-t border-slate-100">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#4a6fa5" }}>
                   <Search size={13} className="text-white" />
                 </div>
                 <div>
                   <div className="text-sm font-mono font-semibold" style={{ color: "#4a6fa5" }}>Search &quot;{query.trim().toUpperCase()}&quot;</div>
-                  <div className="text-xs text-slate-400">Live search across Mouser &amp; DigiKey</div>
+                  <div className="text-xs text-slate-400">Search across Mouser &amp; DigiKey</div>
                 </div>
                 <ChevronRight size={14} style={{ color: "#7b9cc4" }} className="ml-auto" />
               </button>
@@ -731,8 +785,8 @@ export default function OmniProcure() {
                   <Loader2 size={15} className="text-white animate-spin" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-slate-800">Agent sourcing in progress</div>
-                  <div className="text-xs text-slate-400">Tinyfish agents browsing Mouser &amp; DigiKey live</div>
+                  <div className="text-sm font-semibold text-slate-800">Sourcing in progress</div>
+                  <div className="text-xs text-slate-400">Live agents browsing Mouser &amp; DigiKey</div>
                 </div>
                 <div className="ml-auto flex gap-1">
                   {[0, 1, 2].map(i => (
@@ -766,24 +820,26 @@ export default function OmniProcure() {
         {/* ── Results Phase ── */}
         {phase === "results" && results && (
           <div className="w-full max-w-3xl mt-6 space-y-4 animate-fade-in">
+            {/* Recommendation banner */}
             <div className="rounded-2xl px-5 py-4 flex items-start gap-3" style={{ background: "linear-gradient(135deg,#dde8f8,#e8eeff)", border: "1px solid #c8d8f0" }}>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: "#4a6fa5" }}>
                 <Star size={14} className="text-white" />
               </div>
               <div>
-                <div className="font-semibold text-sm mb-0.5" style={{ color: "#1e2d4a" }}>Claude AI Recommendation</div>
+                <div className="font-semibold text-sm mb-0.5" style={{ color: "#1e2d4a" }}>Claude Recommendation</div>
                 <div className="text-sm" style={{ color: "#5a7a9e" }}>{results.recommendation.reason}</div>
               </div>
               <div className="text-xs font-mono shrink-0" style={{ color: "#7b9cc4" }}>{results.partNumber}</div>
             </div>
 
+            {/* Supplier cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {results.suppliers.map((s, i) => (
                 <div key={i} className="relative bg-white rounded-2xl p-5 border-2 transition-all"
                   style={s.recommended ? { borderColor: "#7b9cc4", boxShadow: "0 8px 30px rgba(123,156,196,0.2)" } : { borderColor: "#e2e8f0" }}>
                   {s.recommended && (
                     <div className="absolute -top-3 left-5 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-md" style={{ background: "#4a6fa5" }}>
-                      <CheckCircle size={10} />Claude Pick
+                      <CheckCircle size={10} />Claude Recommended
                     </div>
                   )}
                   <div className="flex items-start justify-between mb-5">
@@ -815,11 +871,14 @@ export default function OmniProcure() {
               ))}
             </div>
 
-            <button onClick={handlePDFClick}
-              className="w-full flex items-center justify-center gap-2.5 active:scale-[0.99] text-white font-semibold py-3.5 rounded-xl transition-all shadow-md hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,#4a6fa5,#6366f1)" }}>
+            {/* PDF button — same for guest and user, guest triggers modal */}
+            <button
+              onClick={handlePDFClick}
+              className="w-full flex items-center justify-center gap-2.5 active:scale-[0.99] text-white font-semibold py-3.5 rounded-xl transition-all shadow-md"
+              style={{ background: "#4a6fa5" }}
+            >
               {user ? <Download size={16} /> : <Lock size={16} />}
-              {user ? "Generate Purchase Order (PDF)" : "Sign in to Generate Purchase Order"}
+              {user ? "Draft Purchase Order (PDF)" : "Sign in to Generate Purchase Order"}
             </button>
 
             <button onClick={reset} className="w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors py-1">
@@ -830,31 +889,65 @@ export default function OmniProcure() {
 
         {/* ── Error ── */}
         {phase === "results" && error && (
-          <div className="w-full max-w-2xl mt-6 bg-white border-2 border-red-100 rounded-2xl px-5 py-5 flex items-start gap-4 shadow-sm animate-fade-in">
-            <div className="w-9 h-9 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
-              <AlertCircle size={16} className="text-red-400" />
+          <div className="w-full max-w-2xl mt-6 space-y-3 animate-fade-in">
+            <div className="bg-white border-2 border-red-100 rounded-2xl px-5 py-5 flex items-start gap-4 shadow-sm">
+              <div className="w-9 h-9 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                <AlertCircle size={16} className="text-red-400" />
+              </div>
+              <div className="flex-1">
+                <div className="text-slate-800 font-semibold text-sm mb-1">Part Not Found</div>
+                <div className="text-slate-500 text-sm leading-relaxed">{error}</div>
+                <button onClick={reset} className="mt-3 text-xs font-medium transition-colors" style={{ color: "#4a6fa5" }}>Try another MPN →</button>
+              </div>
             </div>
-            <div>
-              <div className="text-slate-800 font-semibold text-sm mb-1">Part Not Found</div>
-              <div className="text-slate-500 text-sm leading-relaxed">{error}</div>
-              <button onClick={reset} className="mt-3 text-xs font-medium" style={{ color: "#4a6fa5" }}>Try another MPN →</button>
-            </div>
+
+            {/* Claude alias suggestions */}
+            {aliases.length > 0 && (
+              <div className="bg-white border-2 rounded-2xl px-5 py-5 shadow-sm" style={{ borderColor: "#c8d8f0" }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#dde8f8" }}>
+                    <Search size={13} style={{ color: "#4a6fa5" }} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-800">Did you mean one of these?</div>
+                    <div className="text-xs text-slate-400">Claude identified these distributor SKUs for your search</div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {aliases.map((alias, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setError(null); setAliases([]); runSequence({ part: alias.mpn, desc: alias.description }); }}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border-2 hover:shadow-md transition-all text-left group"
+                      style={{ borderColor: "#e8eeff", background: "linear-gradient(135deg,#f8faff,#f0f4ff)" }}
+                    >
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform" style={{ background: "#4a6fa5" }}>
+                        <Package size={16} className="text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-mono font-bold text-sm text-slate-900">{alias.mpn}</div>
+                        <div className="text-xs text-slate-500 mt-0.5 truncate">{alias.description}</div>
+                      </div>
+                      <ChevronRight size={16} style={{ color: "#7b9cc4" }} className="shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Idle feature cards ── */}
+        {/* ── Idle ── */}
         {phase === "idle" && (
           <div className="mt-20 w-full max-w-2xl space-y-10 animate-fade-in">
             <div className="grid grid-cols-3 gap-6">
               {[
-                { icon: Zap, label: "Autonomous Agents", sub: "Tinyfish agents browse Mouser & DigiKey in real-time — no manual searching" },
-                { icon: Star, label: "Claude AI Analysis", sub: "Claude compares price, stock & lead times and picks the best supplier for you" },
-                { icon: Download, label: "Instant PO Generation", sub: "One-click professional PDF purchase orders, ready to send" },
+                { icon: Zap, label: "Live Web Scraping", sub: "Tinyfish browses Mouser & DigiKey in real-time" },
+                { icon: Star, label: "Claude 3.5 Analysis", sub: "AI picks the best supplier by price & stock" },
+                { icon: Download, label: "Instant PO Generation", sub: "One-click professional PDF purchase orders" },
               ].map(({ icon: Icon, label, sub }, i) => (
-                <div key={i} className="rounded-2xl p-7 text-center shadow-sm hover:shadow-md transition-all cursor-default"
-                  style={{ background: "linear-gradient(135deg,#dde8f8,#e8eeff)", border: "1px solid #c8d8f0" }}>
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4"
-                    style={{ background: "rgba(255,255,255,0.6)", border: "1px solid #b8cce8" }}>
+                <div key={i} className="rounded-2xl p-7 text-center shadow-sm hover:shadow-md transition-all cursor-default" style={{ background: "linear-gradient(135deg,#dde8f8,#e8eeff)", border: "1px solid #c8d8f0" }}>
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4" style={{ background: "rgba(255,255,255,0.6)", border: "1px solid #b8cce8" }}>
                     <Icon size={22} style={{ color: "#4a6fa5" }} />
                   </div>
                   <div className="text-sm font-bold mb-2" style={{ color: "#1e2d4a" }}>{label}</div>
