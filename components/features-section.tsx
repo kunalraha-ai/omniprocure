@@ -2,251 +2,123 @@
 
 import { useEffect, useRef, useState } from "react"
 
-const AnimatedChatDemo = ({ isActive }: { isActive: boolean }) => {
-  const [messages, setMessages] = useState([
-    { text: "Hi! How can I help you today?", isBot: true, visible: false },
-    { text: "I'd like to book an appointment", isBot: false, visible: false },
-    { text: "Perfect! I can help with that. What service are you interested in?", isBot: true, visible: false },
-  ])
-  const [typingDots, setTypingDots] = useState(0)
-  const [currentTime, setCurrentTime] = useState(new Date())
-  const [cycleCount, setCycleCount] = useState(0)
+// ── Atom Logo ──────────────────────────────────────────────────────────────────
+function AtomLogo({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#fs1)" strokeWidth="4" fill="none"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#fs2)" strokeWidth="4" fill="none" transform="rotate(60 50 50)"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#fs3)" strokeWidth="4" fill="none" transform="rotate(120 50 50)"/>
+      <circle cx="50" cy="50" r="9" fill="url(#fsC)"/>
+      <defs>
+        <linearGradient id="fs1" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stopColor="#818cf8"/><stop offset="1" stopColor="#60a5fa"/></linearGradient>
+        <linearGradient id="fs2" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stopColor="#6366f1"/><stop offset="1" stopColor="#38bdf8"/></linearGradient>
+        <linearGradient id="fs3" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stopColor="#a78bfa"/><stop offset="1" stopColor="#60a5fa"/></linearGradient>
+        <radialGradient id="fsC" cx="50%" cy="50%" r="50%"><stop stopColor="#60a5fa"/><stop offset="1" stopColor="#6366f1"/></radialGradient>
+      </defs>
+    </svg>
+  )
+}
 
-  useEffect(() => {
-    const timeInterval = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 1000)
-    return () => clearInterval(timeInterval)
-  }, [])
+// ── Demo 1: Live Agent Scraping (Mouser / DigiKey / LCSC) ─────────────────────
+const AgentScrapingDemo = ({ isActive }: { isActive: boolean }) => {
+  const suppliers = ["Mouser", "DigiKey", "LCSC"]
+  const [activeSupplier, setActiveSupplier] = useState(0)
+  const [progress, setProgress] = useState([0, 0, 0])
+  const [done, setDone] = useState([false, false, false])
 
   useEffect(() => {
     if (!isActive) return
+    setProgress([0, 0, 0])
+    setDone([false, false, false])
+    setActiveSupplier(0)
 
-    const scenarios = [
-      [
-        { text: "Hi! How can I help you today?", isBot: true },
-        { text: "I'd like to book an appointment", isBot: false },
-        { text: "Perfect! I can help with that. What service are you interested in?", isBot: true },
-      ],
-      [
-        { text: "Hello! I'm available 24/7 to assist you.", isBot: true },
-        { text: "Do you have weekend availability?", isBot: false },
-        { text: "I can check our weekend slots for you.", isBot: true },
-      ],
-      [
-        { text: "Good evening! How may I assist you?", isBot: true },
-        { text: "I need help with pricing", isBot: false },
-        { text: "I'd be happy to provide pricing information right away!", isBot: true },
-      ],
-    ]
-
-    const currentScenario = scenarios[cycleCount % scenarios.length]
-    setMessages(currentScenario.map((msg) => ({ ...msg, visible: false })))
-
-    const timer = setTimeout(() => {
-      setMessages((prev) => prev.map((msg, i) => ({ ...msg, visible: i === 0 })))
-
+    suppliers.forEach((_, idx) => {
+      const delay = idx * 1200
       setTimeout(() => {
-        setMessages((prev) => prev.map((msg, i) => ({ ...msg, visible: i <= 1 })))
-
+        setActiveSupplier(idx)
+        const interval = setInterval(() => {
+          setProgress(prev => {
+            const next = [...prev]
+            next[idx] = Math.min(next[idx] + 8, 100)
+            return next
+          })
+        }, 60)
         setTimeout(() => {
-          const typingInterval = setInterval(() => {
-            setTypingDots((prev) => (prev + 1) % 4)
-          }, 500)
-
-          setTimeout(() => {
-            clearInterval(typingInterval)
-            setMessages((prev) => prev.map((msg) => ({ ...msg, visible: true })))
-
-            setTimeout(() => {
-              setCycleCount((prev) => prev + 1)
-            }, 3000)
-          }, 2000)
-        }, 1000)
-      }, 1500)
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [isActive, cycleCount])
-
-  return (
-    <div className="bg-slate-50 rounded-lg p-4 h-32 overflow-hidden relative">
-      <div className="absolute top-2 right-2 flex items-center gap-1">
-        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-        <span className="text-xs text-slate-500 font-medium">24/7</span>
-      </div>
-      <div className="space-y-2">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.isBot ? "justify-start" : "justify-end"} transition-all duration-500 ${
-              msg.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
-            }`}
-          >
-            <div
-              className={`max-w-[80%] px-3 py-1.5 rounded-full text-xs ${
-                msg.isBot ? "bg-slate-200 text-slate-700" : "bg-blue-500 text-white"
-              }`}
-            >
-              {msg.text}
-            </div>
-          </div>
-        ))}
-        {typingDots > 0 && (
-          <div className="flex justify-start">
-            <div className="bg-slate-200 px-3 py-1.5 rounded-full">
-              <div className="flex space-x-1">
-                {[1, 2, 3].map((dot) => (
-                  <div
-                    key={dot}
-                    className={`w-1 h-1 bg-slate-500 rounded-full transition-opacity duration-300 ${
-                      typingDots >= dot ? "opacity-100" : "opacity-30"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const AnimatedPhoneDemo = ({ isActive }: { isActive: boolean }) => {
-  const [callState, setCallState] = useState<"idle" | "ringing" | "answered">("idle")
-  const [callCount, setCallCount] = useState(0)
-
-  useEffect(() => {
-    if (!isActive) return
-
-    const cycleCall = () => {
-      setCallState("ringing")
-      setTimeout(() => {
-        setCallState("answered")
-        setTimeout(() => {
-          setCallState("idle")
-          setCallCount((prev) => prev + 1)
-          setTimeout(cycleCall, 2000)
-        }, 2000)
-      }, 2000)
-    }
-
-    const timer = setTimeout(cycleCall, 800)
-    return () => clearTimeout(timer)
-  }, [isActive])
-
-  return (
-    <div className="bg-slate-50 rounded-lg p-4 h-32 flex items-center justify-center relative">
-      <div className="absolute top-2 right-2 text-xs text-slate-500 font-medium">Calls: {callCount + 1}</div>
-      <div className="relative">
-        <div
-          className={`w-16 h-16 rounded-full bg-green-500 flex items-center justify-center transition-all duration-500 ${
-            callState === "ringing" ? "animate-pulse scale-110" : ""
-          } ${callState === "answered" ? "bg-blue-500" : ""}`}
-        >
-          <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-          </svg>
-        </div>
-        {callState === "ringing" && (
-          <>
-            <div className="absolute inset-0 rounded-full border-2 border-green-400 animate-ping"></div>
-            <div className="absolute inset-0 rounded-full border-2 border-green-400 animate-ping animation-delay-75"></div>
-          </>
-        )}
-        {callState === "answered" && (
-          <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2">
-            <div className="bg-blue-100 px-2 py-1 rounded text-xs text-blue-700 whitespace-nowrap">Call answered</div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const AnimatedCalendarDemo = ({ isActive }: { isActive: boolean }) => {
-  const [selectedDate, setSelectedDate] = useState<number | null>(null)
-  const [booked, setBooked] = useState(false)
-
-  useEffect(() => {
-    if (!isActive) return
-
-    const timer = setTimeout(() => {
-      setSelectedDate(15)
-      setTimeout(() => setBooked(true), 1500)
-    }, 1000)
-
-    return () => clearTimeout(timer)
-  }, [isActive])
-
-  return (
-    <div className="bg-slate-50 rounded-lg p-4 h-32">
-      <div className="grid grid-cols-7 gap-1 text-xs">
-        {Array.from({ length: 21 }, (_, i) => i + 1).map((day) => (
-          <div
-            key={day}
-            className={`w-4 h-4 flex items-center justify-center rounded transition-all duration-300 ${
-              day === selectedDate
-                ? booked
-                  ? "bg-green-500 text-white scale-110"
-                  : "bg-blue-500 text-white scale-110"
-                : day % 7 === 0 || day % 6 === 0
-                  ? "bg-slate-200 text-slate-400"
-                  : "bg-white text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {day}
-          </div>
-        ))}
-      </div>
-      {booked && (
-        <div className="mt-2 text-xs text-green-600 font-medium animate-fade-in">✓ Appointment booked for the 15th</div>
-      )}
-    </div>
-  )
-}
-
-const AnimatedEmailDemo = ({ isActive }: { isActive: boolean }) => {
-  const [emails, setEmails] = useState([
-    { subject: "Service inquiry", status: "unread" },
-    { subject: "Appointment request", status: "unread" },
-    { subject: "Quote needed", status: "unread" },
-  ])
-
-  useEffect(() => {
-    if (!isActive) return
-
-    emails.forEach((_, index) => {
-      setTimeout(
-        () => {
-          setEmails((prev) => prev.map((email, i) => (i === index ? { ...email, status: "replied" } : email)))
-        },
-        1000 + index * 800,
-      )
+          clearInterval(interval)
+          setProgress(prev => { const n = [...prev]; n[idx] = 100; return n })
+          setDone(prev => { const n = [...prev]; n[idx] = true; return n })
+        }, 900)
+      }, delay)
     })
   }, [isActive])
 
   return (
-    <div className="bg-slate-50 rounded-lg p-4 h-32 overflow-hidden">
-      <div className="space-y-2">
-        {emails.map((email, i) => (
+    <div className="bg-slate-50 rounded-xl p-4 h-36 flex flex-col justify-center gap-2.5">
+      {suppliers.map((name, i) => (
+        <div key={name} className="flex items-center gap-3">
+          <span className="text-xs font-mono font-semibold text-slate-600 w-14">{name}</span>
+          <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div
+              className="h-2 rounded-full transition-all duration-100"
+              style={{
+                width: `${progress[i]}%`,
+                background: done[i] ? "#22c55e" : "linear-gradient(90deg,#6366f1,#60a5fa)"
+              }}
+            />
+          </div>
+          <span className="text-xs w-6 text-right">
+            {done[i] ? "✓" : progress[i] > 0 ? `${progress[i]}%` : "—"}
+          </span>
+        </div>
+      ))}
+      <div className="text-[10px] text-slate-400 mt-1 text-center">
+        {done.every(Boolean) ? "✓ All suppliers scraped" : `Browsing ${suppliers[activeSupplier]} live...`}
+      </div>
+    </div>
+  )
+}
+
+// ── Demo 2: Side-by-Side Price Comparison ─────────────────────────────────────
+const PriceComparisonDemo = ({ isActive }: { isActive: boolean }) => {
+  const [visible, setVisible] = useState(false)
+  const [highlight, setHighlight] = useState<number | null>(null)
+
+  const rows = [
+    { supplier: "Mouser", price: "$0.847", stock: "12,400", lead: "2 days", best: false },
+    { supplier: "DigiKey", price: "$0.791", stock: "8,200",  lead: "3 days", best: true  },
+    { supplier: "LCSC",   price: "$0.923", stock: "45,000", lead: "5 days", best: false },
+  ]
+
+  useEffect(() => {
+    if (!isActive) return
+    setVisible(false)
+    setHighlight(null)
+    const t1 = setTimeout(() => setVisible(true), 400)
+    const t2 = setTimeout(() => setHighlight(1), 1200)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [isActive])
+
+  return (
+    <div className="bg-slate-50 rounded-xl p-3 h-36 overflow-hidden">
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
+        MPN: STM32F103C8T6
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((row, i) => (
           <div
-            key={i}
-            className={`flex items-center gap-2 p-2 rounded transition-all duration-500 ${
-              email.status === "replied" ? "bg-green-100" : "bg-white"
-            }`}
+            key={row.supplier}
+            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all duration-500 ${
+              visible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4"
+            } ${highlight === i ? "bg-blue-50 border border-blue-200" : "bg-white border border-slate-100"}`}
+            style={{ transitionDelay: `${i * 150}ms` }}
           >
-            <div className={`w-2 h-2 rounded-full ${email.status === "replied" ? "bg-green-500" : "bg-blue-500"}`} />
-            <span className="text-xs text-slate-700 flex-1">{email.subject}</span>
-            {email.status === "replied" && (
-              <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
+            <span className="font-semibold text-slate-700 w-12">{row.supplier}</span>
+            <span className="font-bold text-slate-900 w-14">{row.price}</span>
+            <span className="text-slate-400 flex-1">{row.stock} units</span>
+            <span className="text-slate-400">{row.lead}</span>
+            {row.best && highlight === i && (
+              <span className="text-[9px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">Best</span>
             )}
           </div>
         ))}
@@ -255,56 +127,124 @@ const AnimatedEmailDemo = ({ isActive }: { isActive: boolean }) => {
   )
 }
 
-const AnimatedLeadsDemo = ({ isActive }: { isActive: boolean }) => {
-  const [leads, setLeads] = useState([
-    { name: "Sarah M.", score: 0, qualified: false },
-    { name: "John D.", score: 0, qualified: false },
-    { name: "Mike R.", score: 0, qualified: false },
-  ])
+// ── Demo 3: Claude AI Recommendation ─────────────────────────────────────────
+const ClaudeRecommendationDemo = ({ isActive }: { isActive: boolean }) => {
+  const [step, setStep] = useState(0)
+  const lines = [
+    "Analyzing 3 supplier quotes...",
+    "Comparing price per unit...",
+    "Checking stock availability...",
+    "Factoring in lead times...",
+  ]
 
   useEffect(() => {
     if (!isActive) return
-
-    leads.forEach((_, index) => {
-      setTimeout(() => {
-        const targetScore = [85, 92, 78][index]
-        const interval = setInterval(() => {
-          setLeads((prev) =>
-            prev.map((lead, i) => {
-              if (i === index && lead.score < targetScore) {
-                const newScore = Math.min(lead.score + 5, targetScore)
-                return {
-                  ...lead,
-                  score: newScore,
-                  qualified: newScore >= 80,
-                }
-              }
-              return lead
-            }),
-          )
-        }, 50)
-
-        setTimeout(() => clearInterval(interval), 1000)
-      }, index * 600)
+    setStep(0)
+    lines.forEach((_, i) => {
+      setTimeout(() => setStep(i + 1), 600 + i * 700)
     })
   }, [isActive])
 
   return (
-    <div className="bg-slate-50 rounded-lg p-4 h-32 overflow-hidden">
+    <div className="bg-slate-50 rounded-xl p-4 h-36 overflow-hidden">
+      <div className="flex items-center gap-2 mb-3">
+        <AtomLogo size={16} />
+        <span className="text-xs font-bold text-slate-700">Claude AI is analyzing...</span>
+      </div>
+      <div className="space-y-1.5">
+        {lines.map((line, i) => (
+          <div key={i} className={`flex items-center gap-2 transition-all duration-400 ${step > i ? "opacity-100" : "opacity-0"}`}>
+            <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+            </svg>
+            <span className="text-xs text-slate-600">{line}</span>
+          </div>
+        ))}
+      </div>
+      {step >= lines.length && (
+        <div className="mt-2 text-xs font-bold px-2 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-700">
+          ★ DigiKey recommended — best price & stock
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Demo 4: Purchase Order Generation ─────────────────────────────────────────
+const POGenerationDemo = ({ isActive }: { isActive: boolean }) => {
+  const [stage, setStage] = useState<"idle" | "building" | "done">("idle")
+  const [fields, setFields] = useState([false, false, false, false])
+
+  useEffect(() => {
+    if (!isActive) return
+    setStage("idle")
+    setFields([false, false, false, false])
+
+    const t1 = setTimeout(() => setStage("building"), 500)
+    const t2 = setTimeout(() => setFields([true, false, false, false]), 800)
+    const t3 = setTimeout(() => setFields([true, true, false, false]), 1200)
+    const t4 = setTimeout(() => setFields([true, true, true, false]), 1600)
+    const t5 = setTimeout(() => setFields([true, true, true, true]), 2000)
+    const t6 = setTimeout(() => setStage("done"), 2400)
+
+    return () => [t1,t2,t3,t4,t5,t6].forEach(clearTimeout)
+  }, [isActive])
+
+  const rows = ["Supplier: DigiKey", "Part: STM32F103C8T6", "Qty: 100 units", "Total: $94.69 + GST"]
+
+  return (
+    <div className="bg-slate-50 rounded-xl p-4 h-36 flex flex-col justify-between overflow-hidden">
+      <div className="space-y-1.5">
+        {rows.map((row, i) => (
+          <div key={i} className={`text-xs px-2 py-1 rounded transition-all duration-400 ${
+            fields[i] ? "bg-white border border-slate-200 text-slate-700" : "bg-slate-100 text-transparent"
+          }`}>
+            {fields[i] ? row : "████████████"}
+          </div>
+        ))}
+      </div>
+      <div className={`flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-bold transition-all duration-500 ${
+        stage === "done"
+          ? "bg-emerald-500 text-white"
+          : stage === "building"
+          ? "bg-blue-100 text-blue-600"
+          : "bg-slate-200 text-slate-400"
+      }`}>
+        {stage === "done" ? "✓ PDF Purchase Order Ready" : stage === "building" ? "Building PO..." : "Waiting..."}
+      </div>
+    </div>
+  )
+}
+
+// ── Demo 5: Search History & Audit Trail ──────────────────────────────────────
+const HistoryDemo = ({ isActive }: { isActive: boolean }) => {
+  const entries = [
+    { part: "STM32F103C8T6", time: "2 mins ago", saved: "$12.40" },
+    { part: "NRF52840-QIAA-R", time: "1 hr ago", saved: "$8.72" },
+    { part: "TPS63020DSJR", time: "3 hrs ago", saved: "$21.30" },
+  ]
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (!isActive) return
+    setVisible(false)
+    const t = setTimeout(() => setVisible(true), 400)
+    return () => clearTimeout(t)
+  }, [isActive])
+
+  return (
+    <div className="bg-slate-50 rounded-xl p-4 h-36 overflow-hidden">
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Recent Searches</div>
       <div className="space-y-2">
-        {leads.map((lead, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-xs text-slate-700 w-12">{lead.name}</span>
-            <div className="flex-1 bg-slate-200 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all duration-500 ${
-                  lead.qualified ? "bg-green-500" : "bg-blue-500"
-                }`}
-                style={{ width: `${lead.score}%` }}
-              />
-            </div>
-            <span className="text-xs font-medium w-8">{lead.score}%</span>
-            {lead.qualified && <span className="text-xs text-green-600">✓</span>}
+        {entries.map((e, i) => (
+          <div key={i} className={`flex items-center gap-2 transition-all duration-500 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}
+            style={{ transitionDelay: `${i * 150}ms` }}>
+            <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span className="text-xs font-mono font-semibold text-slate-700 flex-1">{e.part}</span>
+            <span className="text-[10px] text-emerald-600 font-bold">{e.saved} saved</span>
+            <span className="text-[10px] text-slate-400">{e.time}</span>
           </div>
         ))}
       </div>
@@ -312,98 +252,87 @@ const AnimatedLeadsDemo = ({ isActive }: { isActive: boolean }) => {
   )
 }
 
-const AnimatedIntegrationsDemo = ({ isActive }: { isActive: boolean }) => {
-  const [connections, setConnections] = useState([
-    { name: "CRM", connected: false },
-    { name: "WhatsApp", connected: false },
-    { name: "Calendar", connected: false },
-    { name: "Email", connected: false },
-  ])
+// ── Demo 6: ERP / Slack Integrations ─────────────────────────────────────────
+const IntegrationsDemo = ({ isActive }: { isActive: boolean }) => {
+  const integrations = [
+    { name: "NetSuite ERP", icon: "🏢", connected: false },
+    { name: "SAP S/4HANA", icon: "⚙️", connected: false },
+    { name: "Slack Alerts", icon: "💬", connected: false },
+    { name: "SOC 2 Logs", icon: "🔒", connected: false },
+  ]
+  const [states, setStates] = useState(integrations.map(i => i.connected))
 
   useEffect(() => {
     if (!isActive) return
-
-    connections.forEach((_, index) => {
-      setTimeout(
-        () => {
-          setConnections((prev) => prev.map((conn, i) => (i === index ? { ...conn, connected: true } : conn)))
-        },
-        500 + index * 400,
-      )
+    setStates([false, false, false, false])
+    integrations.forEach((_, i) => {
+      setTimeout(() => {
+        setStates(prev => { const n = [...prev]; n[i] = true; return n })
+      }, 500 + i * 400)
     })
   }, [isActive])
 
   return (
-    <div className="bg-slate-50 rounded-lg p-4 h-32">
+    <div className="bg-slate-50 rounded-xl p-4 h-36">
       <div className="grid grid-cols-2 gap-2">
-        {connections.map((conn, i) => (
-          <div
-            key={i}
-            className={`flex items-center gap-2 p-2 rounded transition-all duration-500 ${
-              conn.connected ? "bg-green-100" : "bg-white"
-            }`}
-          >
-            <div
-              className={`w-2 h-2 rounded-full transition-colors duration-500 ${
-                conn.connected ? "bg-green-500" : "bg-slate-300"
-              }`}
-            />
-            <span className="text-xs text-slate-700">{conn.name}</span>
+        {integrations.map((item, i) => (
+          <div key={i} className={`flex items-center gap-2 p-2 rounded-lg text-xs transition-all duration-500 ${
+            states[i] ? "bg-emerald-50 border border-emerald-100" : "bg-white border border-slate-200"
+          }`}>
+            <span>{item.icon}</span>
+            <span className="text-slate-700 font-medium text-[11px]">{item.name}</span>
+            <div className={`ml-auto w-2 h-2 rounded-full transition-colors duration-500 ${states[i] ? "bg-emerald-500" : "bg-slate-300"}`} />
           </div>
         ))}
       </div>
-      <div className="mt-2 text-center">
-        <div className="text-xs text-slate-500">{connections.filter((c) => c.connected).length}/4 connected</div>
+      <div className="mt-2 text-center text-[10px] text-slate-400">
+        {states.filter(Boolean).length}/4 connected
       </div>
     </div>
   )
 }
 
+// ── Feature definitions ────────────────────────────────────────────────────────
 const features = [
   {
-    title: "24/7 AI Chat Support",
-    description:
-      "Intelligent chatbots that handle customer inquiries, answer questions, and capture leads across your website and social channels.",
-    demo: AnimatedChatDemo,
+    title: "Live Supplier Scraping",
+    description: "Tinyfish agents autonomously browse Mouser, DigiKey & LCSC in real-time — bypassing bot protections to fetch live pricing and stock the moment you search.",
+    demo: AgentScrapingDemo,
     size: "large",
   },
   {
-    title: "AI Phone Receptionist",
-    description:
-      "Professional AI voice assistant that answers calls, takes messages, and books appointments when you're busy or closed.",
-    demo: AnimatedPhoneDemo,
+    title: "Side-by-Side Price Comparison",
+    description: "All supplier results are normalized and displayed as clean comparison cards — price per unit, stock levels, and lead times at a glance.",
+    demo: PriceComparisonDemo,
     size: "medium",
   },
   {
-    title: "Smart Appointment Booking",
-    description:
-      "Automated scheduling system that checks availability, books appointments, and sends confirmations without human intervention.",
-    demo: AnimatedCalendarDemo,
+    title: "Claude AI Recommendation",
+    description: "Claude analyzes every quote and picks the optimal supplier based on price, availability, and lead time — with a plain-English reason why.",
+    demo: ClaudeRecommendationDemo,
     size: "medium",
   },
   {
-    title: "Email Response Automation",
-    description:
-      "AI-powered email assistant that responds to inquiries, provides information, and forwards complex queries to your team.",
-    demo: AnimatedEmailDemo,
+    title: "Instant PO Generation",
+    description: "One click generates a professional PDF Purchase Order pre-filled with the winning supplier, part details, GST calculation, and your company info.",
+    demo: POGenerationDemo,
     size: "large",
   },
   {
-    title: "Lead Qualification & Handoff",
-    description:
-      "Intelligent system that qualifies prospects, gathers key information, and seamlessly hands off hot leads to your sales team.",
-    demo: AnimatedLeadsDemo,
+    title: "Search History & Audit Trail",
+    description: "Every MPN search is saved to your account. Revisit past queries instantly and track cost savings over time.",
+    demo: HistoryDemo,
     size: "medium",
   },
   {
-    title: "Multi-Platform Integration",
-    description:
-      "Connect with your existing tools including CRM, calendar, WhatsApp, SMS, and more for a unified customer experience.",
-    demo: AnimatedIntegrationsDemo,
+    title: "Enterprise Integrations",
+    description: "Connect OmniProcure to your ERP (NetSuite, SAP), Slack procurement channel, and SOC 2 audit logging for a fully automated procurement workflow.",
+    demo: IntegrationsDemo,
     size: "medium",
   },
 ]
 
+// ── Main section ───────────────────────────────────────────────────────────────
 export function FeaturesSection() {
   const sectionRef = useRef<HTMLElement>(null)
   const [isVisible, setIsVisible] = useState(false)
@@ -411,112 +340,84 @@ export function FeaturesSection() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          console.log("[v0] Features Section is now visible") // Added debug log
-          setIsVisible(true)
-        }
-      },
-      {
-        threshold: 0.1,
-        rootMargin: "0px 0px -100px 0px",
-      },
+      ([entry]) => { if (entry.isIntersecting) setIsVisible(true) },
+      { threshold: 0.1, rootMargin: "0px 0px -100px 0px" },
     )
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current)
-    }
-
-    return () => {
-      if (sectionRef.current) {
-        observer.unobserve(sectionRef.current)
-      }
-    }
+    if (sectionRef.current) observer.observe(sectionRef.current)
+    return () => { if (sectionRef.current) observer.unobserve(sectionRef.current) }
   }, [])
 
   return (
     <section id="features" ref={sectionRef} className="relative z-10">
       <div className="bg-white rounded-t-[3rem] pt-16 sm:pt-24 pb-16 sm:pb-24 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.02]">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `radial-gradient(circle at 1px 1px, rgb(0,0,0) 1px, transparent 0)`,
-              backgroundSize: "24px 24px",
-            }}
-          ></div>
+
+        {/* Dot grid background */}
+        <div className="absolute inset-0 opacity-[0.025]">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, rgb(0,0,0) 1px, transparent 0)`,
+            backgroundSize: "24px 24px",
+          }} />
         </div>
 
+        {/* Floating particles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-1 h-1 bg-slate-200 rounded-full animate-float"
-              style={{
-                left: `${20 + i * 15}%`,
-                top: `${30 + (i % 3) * 20}%`,
-                animationDelay: `${i * 0.5}s`,
-                animationDuration: `${4 + i * 0.5}s`,
-              }}
-            ></div>
+            <div key={i} className="absolute w-1 h-1 bg-indigo-200 rounded-full animate-float"
+              style={{ left: `${20 + i * 15}%`, top: `${30 + (i % 3) * 20}%`, animationDelay: `${i * 0.5}s`, animationDuration: `${4 + i * 0.5}s` }} />
           ))}
         </div>
 
         <div className="max-w-7xl mx-auto relative">
-          <div
-            className={`text-center mb-12 sm:mb-20 transition-all duration-1000 ${
-              isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-            }`}
-          >
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-sm font-medium mb-6">
-              <svg className="w-4 h-4 mr-2 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 1H5C3.89 1 3 1.89 3 3V7H1V9H3V15H1V17H3V21C3 22.11 3.89 23 5 23H19C20.11 23 21 22.11 21 21V17H23V15H21V9H23ZM19 9V15H5V9H19ZM7.5 11.5C7.5 10.67 8.17 10 9 10S10.5 10.67 10.5 11.5 9.83 13 9 13 7.5 12.33 7.5 11.5ZM13.5 11.5C13.5 10.67 14.17 10 15 10S16.5 10.67 16.5 11.5 15.83 13 15 13 13.5 12.33 13.5 11.5ZM12 16C13.11 16 14.08 16.59 14.71 17.5H9.29C9.92 16.59 10.89 16 12 16Z" />
-              </svg>
-              AI Working 24/7 - Never Miss a Lead
+
+          {/* Section header */}
+          <div className={`text-center mb-12 sm:mb-20 transition-all duration-1000 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-sm font-medium mb-6">
+              <AtomLogo size={18} />
+              Autonomous Procurement — Powered by Tinyfish + Claude AI
             </div>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 text-balance mb-4 sm:mb-6">
-              Your AI Team{" "}
-              <span className="bg-gradient-to-r from-slate-600 to-slate-400 bg-clip-text text-transparent">
-                Never Sleeps
+              Your AI Sourcing Agent{" "}
+              <span className="bg-gradient-to-r from-indigo-500 to-blue-400 bg-clip-text text-transparent">
+                Never Stops
               </span>
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-slate-600 max-w-3xl mx-auto font-light leading-relaxed">
-              Watch our AI handle real customer interactions around the clock, automatically qualifying leads and
-              booking appointments while you focus on growing your business.
+            <p className="text-base sm:text-lg md:text-xl text-slate-500 max-w-3xl mx-auto font-light leading-relaxed">
+              From MPN search to signed Purchase Order — OmniProcure handles the entire sourcing workflow autonomously, so your team can focus on building.
             </p>
           </div>
 
-          <div
-            className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 transition-all duration-1000 delay-300 ${
-              isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
-            }`}
-          >
+          {/* Feature cards grid */}
+          <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 transition-all duration-1000 delay-300 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"}`}>
             {features.map((feature, index) => (
               <div
                 key={index}
                 className={`group transition-all duration-1000 ${feature.size === "large" ? "md:col-span-2" : ""}`}
-                style={{
-                  transitionDelay: isVisible ? `${300 + index * 100}ms` : "0ms",
-                }}
+                style={{ transitionDelay: isVisible ? `${300 + index * 100}ms` : "0ms" }}
                 onMouseEnter={() => setActiveDemo(index)}
                 onMouseLeave={() => setActiveDemo(null)}
               >
-                <div className="bg-white rounded-2xl p-6 sm:p-8 h-full shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-slate-200 hover:border-slate-300">
+                <div className="bg-white rounded-2xl p-6 sm:p-8 h-full shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-slate-200 hover:border-indigo-100">
                   <div className="mb-6">
                     <feature.demo isActive={activeDemo === index || isVisible} />
                   </div>
-
-                  <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 group-hover:text-slate-700 transition-colors duration-300">
+                  <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors duration-300">
                     {feature.title}
                   </h3>
-
-                  <p className="text-slate-600 text-sm sm:text-base leading-relaxed">{feature.description}</p>
+                  <p className="text-slate-500 text-sm sm:text-base leading-relaxed">{feature.description}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      <style jsx global>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+      `}</style>
     </section>
   )
 }

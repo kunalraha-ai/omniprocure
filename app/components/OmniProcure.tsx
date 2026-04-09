@@ -8,7 +8,7 @@ import {
   TrendingDown, Clock, Download, Zap, Database,
   RefreshCw, ShieldCheck, Lock, ChevronRight, Star,
   AlertCircle, Loader2, LogOut, Mail, Eye, EyeOff,
-  History, Trash2, RotateCcw,
+  History, Trash2, RotateCcw, ExternalLink,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -68,8 +68,8 @@ const SETTINGS_TOGGLES = [
 const WAITING_LINES = [
   "Initializing Tinyfish Agent...",
   "Authenticating session tokens...",
-  "Bypassing bot protections on DigiKey & Mouser...",
-  "Dispatching parallel scrape workers...",
+  "Bypassing bot protections on DigiKey, Mouser & LCSC...",
+  "Dispatching parallel scrape workers [3x]...",
   "Extracting pricing from supplier endpoints...",
   "Normalizing currency & lead-time fields...",
   "Running Claude 3.5 Sonnet analysis...",
@@ -393,7 +393,7 @@ export default function OmniProcure() {
   const saveToHistory = useCallback(async (partNumber: string) => {
     if (!supabase || !user) return;
     try {
-      await (supabase as any).from("search_history").insert({ user_id: user.id, part_number: partNumber });
+      await supabase.from("search_history").insert([{ user_id: user.id, part_number: partNumber }] as any);
       loadHistory();
     } catch {}
   }, [user, loadHistory]);
@@ -402,7 +402,7 @@ export default function OmniProcure() {
   const clearHistory = useCallback(async () => {
     if (!supabase || !user) return;
     try {
-      await (supabase as any).from("search_history").delete().eq("user_id", user.id);
+      await supabase.from("search_history").delete().eq("user_id", user.id);
       setSearchHistory([]);
     } catch {}
   }, [user]);
@@ -411,7 +411,7 @@ export default function OmniProcure() {
   const deleteHistoryItem = useCallback(async (id: string) => {
     if (!supabase) return;
     try {
-      await (supabase as any).from("search_history").delete().eq("id", id);
+      await supabase.from("search_history").delete().eq("id", id);
       setSearchHistory(prev => prev.filter(h => h.id !== id));
     } catch {}
   }, []);
@@ -647,7 +647,7 @@ export default function OmniProcure() {
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-slate-900 mb-3">Intelligent Parts Procurement</h1>
           <p className="text-slate-500 text-sm max-w-md mx-auto leading-relaxed">
-            Enter a Manufacturer Part Number to instantly source and compare live pricing from Mouser and DigiKey, analyzed by AI.
+            Enter a Manufacturer Part Number to instantly source and compare live pricing from Mouser, DigiKey &amp; LCSC, analyzed by AI.
           </p>
           {!user && !authLoading && (
             <p className="text-xs text-slate-400 mt-3">
@@ -786,7 +786,7 @@ export default function OmniProcure() {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-slate-800">Sourcing in progress</div>
-                  <div className="text-xs text-slate-400">Live agents browsing Mouser &amp; DigiKey</div>
+                  <div className="text-xs text-slate-400">Live agents browsing Mouser, DigiKey &amp; LCSC</div>
                 </div>
                 <div className="ml-auto flex gap-1">
                   {[0, 1, 2].map(i => (
@@ -833,7 +833,7 @@ export default function OmniProcure() {
             </div>
 
             {/* Supplier cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {results.suppliers.map((s, i) => (
                 <div key={i} className="relative bg-white rounded-2xl p-5 border-2 transition-all"
                   style={s.recommended ? { borderColor: "#7b9cc4", boxShadow: "0 8px 30px rgba(123,156,196,0.2)" } : { borderColor: "#e2e8f0" }}>
@@ -866,7 +866,16 @@ export default function OmniProcure() {
                       <span className="text-sm font-bold text-slate-800">${(s.price * 100).toFixed(2)}</span>
                     </div>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-400 truncate">{s.url}</div>
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-1.5 group transition-colors"
+                  >
+                    <span className="text-xs text-slate-400 truncate flex-1 group-hover:text-[#4a6fa5] transition-colors">{s.url}</span>
+                    <ExternalLink size={11} className="text-slate-300 group-hover:text-[#4a6fa5] shrink-0 transition-colors" />
+                  </a>
                 </div>
               ))}
             </div>
@@ -942,7 +951,7 @@ export default function OmniProcure() {
           <div className="mt-20 w-full max-w-2xl space-y-10 animate-fade-in">
             <div className="grid grid-cols-3 gap-6">
               {[
-                { icon: Zap, label: "Live Web Scraping", sub: "Tinyfish browses Mouser & DigiKey in real-time" },
+                { icon: Zap, label: "Live Web Scraping", sub: "Tinyfish browses Mouser, DigiKey & LCSC in real-time" },
                 { icon: Star, label: "Claude 3.5 Analysis", sub: "AI picks the best supplier by price & stock" },
                 { icon: Download, label: "Instant PO Generation", sub: "One-click professional PDF purchase orders" },
               ].map(({ icon: Icon, label, sub }, i) => (

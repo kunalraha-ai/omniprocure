@@ -1,5 +1,9 @@
+"use client";
+
 import { Button } from "@/components/ui/button"
-import RotatingText from "./RotatingText"
+import RotatingText from "@/components/RotatingText";
+import Aurora from "@/components/Aurora";
+import Link from "next/link";
 
 const ArrowRight = () => (
   <svg
@@ -12,40 +16,39 @@ const ArrowRight = () => (
   </svg>
 )
 
-const Play = () => (
-  <svg
-    className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h8a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2z"
-    />
-  </svg>
-)
-
 export function HeroSection() {
   return (
-    <section className="min-h-screen flex items-center justify-center px-4 py-20 relative">
+    <section className="min-h-screen flex items-center justify-center px-4 py-20 relative overflow-hidden">
+
+      {/* ── Aurora background ── */}
+      <div className="absolute inset-0 z-0">
+        <Aurora
+          colorStops={["#1e1b4b", "#3730a3", "#0f172a"]}
+          amplitude={1.2}
+          blend={0.6}
+          speed={0.8}
+        />
+      </div>
+
+      {/* ── Dark base so text is always readable ── */}
+      <div className="absolute inset-0 z-0 bg-slate-950/60" />
+
       <div className="max-w-4xl mx-auto text-center relative z-10 animate-fade-in-hero">
+
         {/* Badge */}
         <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium mb-8 mt-12 animate-fade-in-badge">
-          <span className="w-2 h-2 bg-white/60 rounded-full mr-2 animate-pulse"></span>
-          AI Automation for Enterprise
+          <span className="w-2 h-2 bg-indigo-400 rounded-full mr-2 animate-pulse"></span>
+          Powered by Tinyfish + Claude AI
         </div>
 
         {/* Main Heading */}
         <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-balance mb-6 animate-fade-in-heading">
-          <span className="text-foreground">Elevate your</span>
+          <span className="text-white">Automate Your</span>
           <br />
           <span className="inline-flex items-center justify-center flex-wrap gap-2 mt-4 sm:mt-6 md:mt-8">
-            <span className="text-foreground">Business</span>
+            <span className="text-white">Hardware</span>
             <RotatingText
-              texts={["Growth", "Innovation", "Efficiency", "Success", "Performance"]}
+              texts={["Procurement", "Sourcing", "Purchasing", "Quoting", "Ordering"]}
               mainClassName="px-2 sm:px-2 md:px-3 bg-white text-black overflow-hidden py-1 sm:py-1 md:py-2 justify-center rounded-lg shadow-lg"
               staggerFrom={"last"}
               initial={{ y: "100%" }}
@@ -60,86 +63,64 @@ export function HeroSection() {
         </h1>
 
         {/* Subheading */}
-        <p className="text-base sm:text-xl md:text-2xl text-white text-balance max-w-sm sm:max-w-3xl mx-auto mb-8 sm:mb-12 leading-relaxed px-4 sm:px-0 animate-fade-in-subheading font-light">
-          Cliste helps Irish businesses save time and boost revenue with smart chat, workflows and automations, fully
-          managed for you.
+        <p className="text-base sm:text-xl md:text-2xl text-white/70 text-balance max-w-sm sm:max-w-3xl mx-auto mb-8 sm:mb-12 leading-relaxed px-4 sm:px-0 animate-fade-in-subheading font-light">
+          Enter any Manufacturer Part Number and our AI agents instantly browse Mouser, DigiKey & LCSC live — Claude picks the best supplier and generates your Purchase Order in one click.
         </p>
 
-        {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8 sm:mb-16 animate-fade-in-buttons">
-          <Button
-            size="lg"
-            className="bg-white text-black rounded-full px-8 py-4 text-lg font-medium transition-all duration-300 hover:bg-gray-50 hover:scale-105 hover:shadow-lg group cursor-pointer relative overflow-hidden"
-          >
-            Start Automating
-            <ArrowRight />
-          </Button>
-
-          <Button
-            variant="outline"
-            size="lg"
-            className="rounded-full px-8 py-4 text-lg font-medium border-border hover:bg-accent transition-all duration-200 hover:scale-105 group bg-transparent cursor-pointer"
-          >
-            <Play />
-            Watch Demo
-          </Button>
+        {/* CTA — single button linking to /dashboard */}
+        <div className="flex items-center justify-center mb-8 sm:mb-16 animate-fade-in-buttons">
+          <Link href="/dashboard">
+            <Button
+              size="lg"
+              className="bg-white text-black rounded-full px-10 py-4 text-lg font-semibold transition-all duration-300 hover:bg-gray-100 hover:scale-105 hover:shadow-xl group cursor-pointer"
+            >
+              Start Sourcing
+              <ArrowRight />
+            </Button>
+          </Link>
         </div>
 
-        {/* Trust Indicators */}
+        {/* Trust bar */}
         <div className="text-center px-4 hidden sm:block overflow-hidden animate-fade-in-trust">
-          <p className="text-sm text-white mb-6">Trusted by innovative companies worldwide</p>
+          <p className="text-sm text-white/40 mb-6 uppercase tracking-widest font-medium">Live data from</p>
           <div className="relative overflow-hidden w-full max-w-4xl mx-auto">
-            <div className="flex items-center gap-8 opacity-60 hover:opacity-80 transition-all duration-500 animate-slide-left">
-              <div className="flex items-center gap-8 whitespace-nowrap">
-                <div className="text-base sm:text-lg font-semibold">TechCorp</div>
-                <div className="text-base sm:text-lg font-semibold">InnovateLab</div>
-                <div className="text-base sm:text-lg font-semibold">FutureScale</div>
-                <div className="text-base sm:text-lg font-semibold">AutoFlow</div>
-                <div className="text-base sm:text-lg font-semibold">eScale</div>
-                <div className="text-base sm:text-lg font-semibold">DataFlow</div>
+            <div className="flex items-center gap-12 opacity-50 hover:opacity-70 transition-all duration-500 animate-slide-left">
+              <div className="flex items-center gap-12 whitespace-nowrap">
+                {["Mouser Electronics", "DigiKey", "LCSC", "Tinyfish AI", "Claude AI", "Supabase"].map((name) => (
+                  <div key={name} className="text-base sm:text-lg font-semibold text-white">{name}</div>
+                ))}
               </div>
               {/* Duplicate for seamless loop */}
-              <div className="flex items-center gap-8 whitespace-nowrap">
-                <div className="text-base sm:text-lg font-semibold">TechCorp</div>
-                <div className="text-base sm:text-lg font-semibold">InnovateLab</div>
-                <div className="text-base sm:text-lg font-semibold">FutureScale</div>
-                <div className="text-base sm:text-lg font-semibold">AutoFlow</div>
-                <div className="text-base sm:text-lg font-semibold">eScale</div>
-                <div className="text-base sm:text-lg font-semibold">DataFlow</div>
+              <div className="flex items-center gap-12 whitespace-nowrap">
+                {["Mouser Electronics", "DigiKey", "LCSC", "Tinyfish AI", "Claude AI", "Supabase"].map((name) => (
+                  <div key={name + "-dup"} className="text-base sm:text-lg font-semibold text-white">{name}</div>
+                ))}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Mobile Trust Indicators */}
+        {/* Mobile trust bar */}
         <div className="text-center px-4 mb-8 sm:hidden overflow-hidden animate-fade-in-trust">
-          <p className="text-sm text-white mb-6">Trusted by innovative companies worldwide</p>
+          <p className="text-sm text-white/40 mb-4 uppercase tracking-widest font-medium">Live data from</p>
           <div className="relative overflow-hidden w-full max-w-sm mx-auto">
-            {/* Left blur fade */}
-            <div className="absolute left-0 top-0 w-8 h-full bg-gradient-to-r from-black to-transparent z-10 pointer-events-none"></div>
-            {/* Right blur fade */}
-            <div className="absolute right-0 top-0 w-8 h-full bg-gradient-to-l from-black to-transparent z-10 pointer-events-none"></div>
-            <div className="flex items-center gap-6 opacity-60 animate-slide-left-mobile">
+            <div className="absolute left-0 top-0 w-8 h-full bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
+            <div className="absolute right-0 top-0 w-8 h-full bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
+            <div className="flex items-center gap-6 opacity-50 animate-slide-left-mobile">
               <div className="flex items-center gap-6 whitespace-nowrap">
-                <div className="text-sm font-semibold">TechCorp</div>
-                <div className="text-sm font-semibold">InnovateLab</div>
-                <div className="text-sm font-semibold">FutureScale</div>
-                <div className="text-sm font-semibold">AutoFlow</div>
-                <div className="text-sm font-semibold">eScale</div>
-                <div className="text-sm font-semibold">DataFlow</div>
+                {["Mouser", "DigiKey", "LCSC", "Tinyfish", "Claude AI"].map((name) => (
+                  <div key={name} className="text-sm font-semibold text-white">{name}</div>
+                ))}
               </div>
-              {/* Duplicate for seamless loop */}
               <div className="flex items-center gap-6 whitespace-nowrap">
-                <div className="text-sm font-semibold">TechCorp</div>
-                <div className="text-sm font-semibold">InnovateLab</div>
-                <div className="text-sm font-semibold">FutureScale</div>
-                <div className="text-sm font-semibold">AutoFlow</div>
-                <div className="text-sm font-semibold">eScale</div>
-                <div className="text-sm font-semibold">DataFlow</div>
+                {["Mouser", "DigiKey", "LCSC", "Tinyfish", "Claude AI"].map((name) => (
+                  <div key={name + "-dup"} className="text-sm font-semibold text-white">{name}</div>
+                ))}
               </div>
             </div>
           </div>
         </div>
+
       </div>
     </section>
   )

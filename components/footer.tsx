@@ -1,8 +1,7 @@
-"use client"
+"use client";
 import type React from "react"
 import type { ComponentProps, ReactNode } from "react"
 import { motion, useReducedMotion } from "framer-motion"
-import { FacebookIcon, InstagramIcon, LinkedinIcon, YoutubeIcon } from "lucide-react"
 import Image from "next/image"
 
 interface FooterLink {
@@ -42,15 +41,6 @@ const footerLinks: FooterSection[] = [
       { title: "Case Studies", href: "/case-studies" },
       { title: "Documentation", href: "/docs" },
       { title: "Support", href: "/support" },
-    ],
-  },
-  {
-    label: "Social Links",
-    links: [
-      { title: "Facebook", href: "#", icon: FacebookIcon },
-      { title: "Instagram", href: "#", icon: InstagramIcon },
-      { title: "Youtube", href: "#", icon: YoutubeIcon },
-      { title: "LinkedIn", href: "#", icon: LinkedinIcon },
     ],
   },
 ]

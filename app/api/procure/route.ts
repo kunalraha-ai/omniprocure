@@ -14,24 +14,15 @@ interface SupplierResult {
   recommended?: boolean;
 }
 
-// ── Read Tinyfish SSE stream properly ─────────────────────────────────────────
+// ── Read Tinyfish SSE stream ───────────────────────────────────────────────────
 async function runTinyfishAgent(url: string, goal: string): Promise<string> {
   const apiKey = process.env.TINYFISH_API_KEY!;
-
   console.log(`[Tinyfish] Starting agent for: ${url}`);
 
   const res = await fetch("https://agent.tinyfish.ai/v1/automation/run-sse", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-    },
-    body: JSON.stringify({
-      url,
-      goal,
-      proxy_config: { enabled: false },
-    }),
-    // No AbortSignal here — let Next.js maxDuration handle it
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({ url, goal, proxy_config: { enabled: false } }),
   });
 
   if (!res.ok) {
@@ -39,7 +30,6 @@ async function runTinyfishAgent(url: string, goal: string): Promise<string> {
     throw new Error(`Tinyfish HTTP ${res.status}: ${errText}`);
   }
 
-  // Read SSE stream chunk by chunk
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let lastResult = "";
@@ -48,40 +38,27 @@ async function runTinyfishAgent(url: string, goal: string): Promise<string> {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");
-    buffer = lines.pop() ?? ""; // keep incomplete last line
+    buffer = lines.pop() ?? "";
 
     for (const line of lines) {
       if (!line.startsWith("data:")) continue;
       const raw = line.slice(5).trim();
       if (!raw || raw === "[DONE]") continue;
-
       try {
         const parsed = JSON.parse(raw);
         console.log(`[Tinyfish] Event type:`, parsed.type ?? parsed.status ?? "unknown");
-
-        // Capture result from COMPLETE or final events
         if (parsed.result !== undefined && parsed.result !== null) {
-          lastResult = typeof parsed.result === "string"
-            ? parsed.result
-            : JSON.stringify(parsed.result);
+          lastResult = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
         }
-
-        // Some versions send output directly
         if (parsed.output !== undefined) {
-          lastResult = typeof parsed.output === "string"
-            ? parsed.output
-            : JSON.stringify(parsed.output);
+          lastResult = typeof parsed.output === "string" ? parsed.output : JSON.stringify(parsed.output);
         }
-
-        // Check for failure
         if (parsed.status === "FAILED" || parsed.type === "ERROR") {
           throw new Error(`Tinyfish agent failed: ${parsed.message ?? "unknown"}`);
         }
-      } catch (parseErr) {
-        // Not JSON — might be plain text result
+      } catch {
         if (raw.length > 5) lastResult = raw;
       }
     }
@@ -105,24 +82,13 @@ If part not found, return: {"found":false}`;
     const raw = await runTinyfishAgent(supplierUrl, goal);
     console.log(`[OmniProcure] ${supplierName} raw response:`, raw.slice(0, 500));
 
-    if (!raw) {
-      console.warn(`[OmniProcure] ${supplierName}: empty response`);
-      return null;
-    }
+    if (!raw) { console.warn(`[OmniProcure] ${supplierName}: empty response`); return null; }
 
-    // Extract JSON from response (handles cases where there's surrounding text)
     const jsonMatch = raw.match(/\{[\s\S]*?\}/);
-    if (!jsonMatch) {
-      console.warn(`[OmniProcure] ${supplierName}: no JSON in response`);
-      return null;
-    }
+    if (!jsonMatch) { console.warn(`[OmniProcure] ${supplierName}: no JSON in response`); return null; }
 
     const data = JSON.parse(jsonMatch[0]);
-
-    if (!data.found || data.price == null) {
-      console.log(`[OmniProcure] ${supplierName}: part not found`);
-      return null;
-    }
+    if (!data.found || data.price == null) { console.log(`[OmniProcure] ${supplierName}: part not found`); return null; }
 
     return {
       name: supplierName,
@@ -138,14 +104,13 @@ If part not found, return: {"found":false}`;
   }
 }
 
-// ── Claude 3.5 Sonnet analysis ─────────────────────────────────────────────────
+// ── Claude analysis ────────────────────────────────────────────────────────────
 async function analyzeWithClaude(
   partNumber: string,
   suppliers: SupplierResult[]
 ): Promise<{ winner: string; reason: string; recommendedIndex: number }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  // Rule-based fallback
   const fallback = () => {
     const bestIdx = suppliers.reduce((bi, s, i) => s.price < suppliers[bi].price ? i : bi, 0);
     return {
@@ -167,7 +132,7 @@ Scoring weights: price 60%, stock availability 30%, lead time 10%.
 Respond with ONLY valid JSON, no markdown, no explanation:
 {
   "winner": "<exact supplier name>",
-  "recommendedIndex": <0 or 1>,
+  "recommendedIndex": <0, 1, or 2>,
   "reason": "<one sentence under 120 chars>"
 }`;
 
@@ -205,6 +170,49 @@ Respond with ONLY valid JSON, no markdown, no explanation:
   }
 }
 
+// ── Claude alias/SKU suggester ─────────────────────────────────────────────────
+async function suggestAliases(partNumber: string): Promise<Array<{ mpn: string; description: string }>> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return [];
+
+  const prompt = `An engineer searched for the electronic component "${partNumber}" on Mouser, DigiKey, and LCSC but it was not found.
+
+This could be because they used a marketing name instead of the actual MPN (e.g. "RP2040" instead of "SC0914"), a partial part number, or there are common variant SKUs.
+
+Suggest up to 3 alternative MPNs or SKUs that distributors like Mouser, DigiKey, and LCSC actually list this component under.
+
+Respond ONLY with valid JSON, no markdown:
+[
+  { "mpn": "<exact distributor MPN>", "description": "<brief reason why this is the correct SKU>" }
+]
+
+If you have no confident suggestions, return an empty array: []`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 512,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const text = data?.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return [];
+  }
+}
+
 // ── POST handler ───────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -217,8 +225,8 @@ export async function POST(req: NextRequest) {
 
     console.log(`\n[OmniProcure] ═══ Searching: ${partNumber} ═══`);
 
-    // Scrape both suppliers in parallel using direct search URLs
-    const [mouserResult, digikeyResult] = await Promise.all([
+    // Scrape all three suppliers in parallel
+    const [mouserResult, digikeyResult, lcscResult] = await Promise.all([
       scrapeSupplier(
         "Mouser Electronics",
         `https://www.mouser.com/Search/Refine?Keyword=${encodeURIComponent(partNumber)}`,
@@ -229,14 +237,20 @@ export async function POST(req: NextRequest) {
         `https://www.digikey.com/en/products/result?keywords=${encodeURIComponent(partNumber)}`,
         partNumber
       ),
+      scrapeSupplier(
+        "LCSC",
+        `https://www.lcsc.com/search?q=${encodeURIComponent(partNumber)}`,
+        partNumber
+      ),
     ]);
 
-    const validSuppliers = [mouserResult, digikeyResult].filter(Boolean) as SupplierResult[];
+    const validSuppliers = [mouserResult, digikeyResult, lcscResult].filter(Boolean) as SupplierResult[];
 
-    // Neither found — return not found
+    // None found — ask Claude for aliases
     if (validSuppliers.length === 0) {
-      console.log(`[OmniProcure] ✗ Not found on either supplier`);
-      return NextResponse.json({ notFound: true, partNumber });
+      console.log(`[OmniProcure] ✗ Not found — asking Claude for aliases`);
+      const aliases = await suggestAliases(partNumber);
+      return NextResponse.json({ notFound: true, partNumber, aliases });
     }
 
     // Only one found
@@ -252,7 +266,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Both found — Claude picks the winner
+    // Multiple found — Claude picks the winner
     const analysis = await analyzeWithClaude(partNumber, validSuppliers);
     const taggedSuppliers = validSuppliers.map((s, i) => ({
       ...s,
