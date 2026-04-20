@@ -5,78 +5,93 @@ import { createClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import {
-  Search, Settings, X, CheckCircle, Package,
-  TrendingDown, Clock, Download, Zap, Database,
-  RefreshCw, ShieldCheck, Lock, ChevronRight, Star,
-  AlertCircle, Loader2, LogOut, Mail, Eye, EyeOff,
-  History, Trash2, RotateCcw, ExternalLink, Lightbulb,
+  Search, Settings, X, CheckCircle, Package, Clock,
+  Download, Zap, Database, RefreshCw, ShieldCheck, Lock,
+  ChevronRight, Star, AlertCircle, Loader2, LogOut,
+  Mail, Eye, EyeOff, History, Trash2, RotateCcw,
+  ExternalLink, Cpu, ShoppingCart,
 } from "lucide-react";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface CatalogItem { part: string; desc: string; }
+
 interface SupplierResult {
-  name: string; price: number; currency: string;
-  stock: number; leadTime: string; url: string; recommended?: boolean;
+  supplier: string;
+  tier: "standard" | "chinese";
+  mpn: string;
+  price: number | null;
+  currency: string;
+  stock: number;
+  leadTime: string;
+  url: string;
+  moq: number;
+  recommended?: boolean;
 }
-interface ProcureResult {
-  partNumber: string;
-  suppliers: SupplierResult[];
-  recommendation: { winner: string; reason: string; };
+
+interface ClaudeRanking {
+  winner: string;
+  reason: string;
+  recommendedIndex: number;
 }
-interface AliasItem { mpn: string; description: string; }
-interface AlternativeSet { forSupplier: string; alternatives: AliasItem[]; }
+
 interface HistoryItem { id: string; part_number: string; searched_at: string; }
 
-// ── Supabase singleton ─────────────────────────────────────────────────────────
+type SearchPhase = "idle" | "searching" | "done" | "error";
+
+// ── Supabase singleton ────────────────────────────────────────────────────────
 const getSupabase = (() => {
-  let instance: ReturnType<typeof createClient> | null = null;
+  let inst: ReturnType<typeof createClient> | null = null;
   return () => {
-    if (instance) return instance;
+    if (inst) return inst;
     try {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (url && key) instance = createClient(url, key);
-    } catch (_) {}
-    return instance;
+      if (url && key) inst = createClient(url, key);
+    } catch {}
+    return inst;
   };
 })();
 const supabase = getSupabase();
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
+// Must match SUPPLIERS array in small-suppliers/route.ts exactly
+const SUPPLIER_NAMES: Array<{ name: string; tier: "standard" | "chinese" }> = [
+  { name: "LCSC",     tier: "standard" },
+  { name: "UTSource", tier: "chinese"  },
+  { name: "Alibaba",  tier: "chinese"  },
+];
 const FALLBACK_CATALOG: CatalogItem[] = [
-  { part: "STM32F103C8T6", desc: "ARM Cortex-M3 Microcontroller, 72MHz" },
-  { part: "GRM188R71H104KA93D", desc: "Multilayer Ceramic Capacitor 100nF" },
-  { part: "LM358DR2G", desc: "Dual General Purpose Op-Amp, SOIC-8" },
-  { part: "NRF52840-QIAA-R", desc: "Bluetooth 5.0 SoC, ARM Cortex-M4" },
-  { part: "TPS63020DSJR", desc: "Buck-Boost Converter, 1.8A, 96% Eff." },
+  { part: "STM32F103C8T6",      desc: "ARM Cortex-M3 Microcontroller" },
+  { part: "NRF52840-QIAA-R",    desc: "Bluetooth 5.0 SoC" },
+  { part: "LM358DR2G",          desc: "Dual Op-Amp, SOIC-8" },
+  { part: "GRM188R71H104KA93D", desc: "Ceramic Capacitor 100nF" },
+  { part: "TPS63020DSJR",       desc: "Buck-Boost Converter" },
+  { part: "ESP32-WROOM-32",     desc: "Wi-Fi + BT SoC Module" },
+  { part: "AMS1117-3.3",        desc: "LDO Voltage Regulator 3.3V" },
+  { part: "MPU-6050",           desc: "6-Axis IMU Sensor" },
 ];
 
 const SETTINGS_TOGGLES = [
-  { label: "NetSuite ERP Sync", sub: "Connect to Oracle NetSuite GL", icon: Database, enabled: false },
-  { label: "SAP S/4HANA Connector", sub: "Bidirectional PO sync", icon: RefreshCw, enabled: false },
-  { label: "Slack Procurement Alerts", sub: "Notify #procurement channel", icon: Zap, enabled: false },
-  { label: "SOC 2 Audit Logging", sub: "Immutable event trail", icon: ShieldCheck, enabled: true },
-  { label: "Auto-PO Approval ≤$500", sub: "Requires finance sign-off above", icon: CheckCircle, enabled: false },
+  { label: "NetSuite ERP Sync",        sub: "Connect to Oracle NetSuite GL",  icon: Database,    enabled: false },
+  { label: "SAP S/4HANA Connector",    sub: "Bidirectional PO sync",          icon: RefreshCw,   enabled: false },
+  { label: "Slack Procurement Alerts", sub: "Notify #procurement channel",    icon: Zap,         enabled: false },
+  { label: "SOC 2 Audit Logging",      sub: "Immutable event trail",          icon: ShieldCheck, enabled: true  },
 ];
 
-const WAITING_LINES = [
-  "Initializing Tinyfish Agents...",
-  "Bypassing bot protections on DigiKey, Mouser & LCSC...",
-  "Dispatching parallel scrape workers [3x]...",
-  "Extracting live pricing from supplier endpoints...",
-  "Normalizing currency & lead-time fields...",
-  "Running Claude AI analysis...",
-];
+const TIER_STYLE = {
+  standard: {
+    color: "#a5b4fc",
+    bg: "rgba(99,102,241,0.12)",
+    border: "rgba(99,102,241,0.3)",
+  },
+  chinese: {
+    color: "#fb923c",
+    bg: "rgba(249,115,22,0.10)",
+    border: "rgba(249,115,22,0.3)",
+  },
+};
 
-const LOOPING_LINES = [
-  "Agents still browsing live pages...",
-  "Waiting for remaining supplier responses...",
-  "Processing supplier data...",
-  "Cross-referencing stock levels...",
-  "Almost there...",
-];
-
-// ── AtomLogo ───────────────────────────────────────────────────────────────────
+// ── Atom logo ─────────────────────────────────────────────────────────────────
 function AtomLogo({ size = 30 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
@@ -97,19 +112,19 @@ function AtomLogo({ size = 30 }: { size?: number }) {
   );
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
   return (
     <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl animate-slide-up"
-      style={{ background: "rgba(30,27,75,0.95)", border: "1px solid rgba(99,102,241,0.3)", backdropFilter: "blur(12px)" }}>
+      style={{ background: "rgba(30,27,75,0.97)", border: "1px solid rgba(99,102,241,0.3)", backdropFilter: "blur(12px)" }}>
       <CheckCircle size={16} className="text-indigo-400" />
       <span className="font-medium text-sm text-white">{message}</span>
     </div>
   );
 }
 
-// ── Toggle ─────────────────────────────────────────────────────────────────────
+// ── Toggle ────────────────────────────────────────────────────────────────────
 function Toggle({ enabled }: { enabled: boolean }) {
   return (
     <div className="relative w-9 h-5 rounded-full transition-colors duration-200"
@@ -119,59 +134,197 @@ function Toggle({ enabled }: { enabled: boolean }) {
   );
 }
 
-// ── Stock badge ────────────────────────────────────────────────────────────────
+// ── StockBadge ────────────────────────────────────────────────────────────────
 function StockBadge({ stock }: { stock: number }) {
-  if (stock > 1000) return <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>{stock.toLocaleString()} units</span>;
-  if (stock > 0) return <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)" }}>{stock.toLocaleString()} units</span>;
-  return <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: "#f87171", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}>Out of Stock</span>;
+  if (stock > 1000) return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+      style={{ color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>
+      {stock.toLocaleString()} units
+    </span>
+  );
+  if (stock > 0) return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+      style={{ color: "#fbbf24", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)" }}>
+      {stock.toLocaleString()} units
+    </span>
+  );
+  return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+      style={{ color: "#f87171", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}>
+      Out of Stock
+    </span>
+  );
 }
 
-// ── Auth Modal ─────────────────────────────────────────────────────────────────
+// ── SupplierCard ──────────────────────────────────────────────────────────────
+function SupplierCard({
+  supplier, loading = false, notFound = false, name, tier,
+}: {
+  supplier?: SupplierResult;
+  name?: string;
+  tier?: "standard" | "chinese";
+  loading?: boolean;
+  notFound?: boolean;
+}) {
+  const displayName = supplier?.supplier ?? name ?? "Supplier";
+  const cardTier = supplier?.tier ?? tier ?? "standard";
+  const style = TIER_STYLE[cardTier];
+
+  if (loading) return (
+    <div className="rounded-2xl p-5 animate-fade-in"
+      style={{ background: style.bg, border: `1px solid ${style.border}` }}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="font-bold text-white/70 text-sm">{displayName}</div>
+        <Loader2 size={14} className="animate-spin" style={{ color: style.color }} />
+      </div>
+      <div className="rounded-xl px-3 py-2.5"
+        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: style.color }} />
+          <span className="text-xs font-mono" style={{ color: style.color }}>Searching via TinyFish...</span>
+        </div>
+        {["Finding product URL...", "Fetching page content...", "Parsing price & stock..."].map((l, i) => (
+          <div key={i} className="flex items-center gap-2 mt-1">
+            <div className="w-1 h-1 rounded-full bg-white/10" />
+            <span className="text-xs text-white/20 font-mono">{l}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (notFound || !supplier) return (
+    <div className="rounded-2xl p-4 animate-fade-in"
+      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div className="flex items-center justify-between">
+        <div className="font-semibold text-white/35 text-sm">{displayName}</div>
+        <span className="text-xs text-white/20 px-2 py-0.5 rounded-full"
+          style={{ border: "1px solid rgba(255,255,255,0.07)" }}>Not listed</span>
+      </div>
+    </div>
+  );
+
+  const isRecommended = supplier.recommended;
+
+  return (
+    <div className="relative rounded-2xl p-5 animate-fade-in transition-all"
+      style={isRecommended
+        ? { background: "rgba(99,102,241,0.10)", border: "1.5px solid rgba(99,102,241,0.45)", boxShadow: "0 8px 40px rgba(99,102,241,0.18)" }
+        : { background: style.bg, border: `1px solid ${style.border}` }}>
+
+      {isRecommended && (
+        <div className="absolute -top-3 left-4 flex items-center gap-1.5 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg"
+          style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+          <Star size={10} />Best Choice
+        </div>
+      )}
+
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="font-bold text-white/90 text-base">{supplier.supplier}</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ color: style.color, background: style.bg, border: `1px solid ${style.border}` }}>
+              {cardTier === "standard" ? "Standard" : "Chinese"}
+            </span>
+          </div>
+          <div className="text-white/30 text-xs font-mono">{supplier.mpn}</div>
+        </div>
+        <div className="text-right">
+          {supplier.price != null ? (
+            <>
+              <div className="text-xl font-bold text-white">
+                {supplier.currency} {supplier.price.toFixed(supplier.currency === "CNY" ? 2 : 3)}
+              </div>
+              <div className="text-white/30 text-xs">per unit · MOQ {supplier.moq}</div>
+            </>
+          ) : (
+            <div className="text-sm text-white/40">Contact for price</div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs text-white/40"><Package size={11} />Stock</div>
+          <StockBadge stock={supplier.stock} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs text-white/40"><Clock size={11} />Lead Time</div>
+          <span className="text-xs font-semibold text-white/70">{supplier.leadTime}</span>
+        </div>
+      </div>
+
+      <a href={supplier.url} target="_blank" rel="noopener noreferrer"
+        className="flex items-center gap-1.5 group transition-colors pt-3"
+        style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <span className="text-xs text-white/20 truncate flex-1 group-hover:text-indigo-400 transition-colors">{supplier.url}</span>
+        <ExternalLink size={11} className="text-white/15 group-hover:text-indigo-400 shrink-0 transition-colors" />
+      </a>
+    </div>
+  );
+}
+
+// ── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false); const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleEmail = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!supabase) return;
+    e.preventDefault();
+    if (!supabase) return;
     setLoading(true); setError("");
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setError("Check your email to confirm your account."); setLoading(false); return;
+        setError("Check your email to confirm your account.");
+        setLoading(false); return;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
       onSuccess(); onClose();
-    } catch (err: any) { setError(err.message ?? "Something went wrong"); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      setError(err.message ?? "Something went wrong");
+    } finally { setLoading(false); }
   };
 
   const handleGoogle = async () => {
-    if (!supabase) return; setGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+    if (!supabase) return;
+    setGoogleLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
     if (error) { setError(error.message); setGoogleLoading(false); }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(3,7,18,0.7)" }} onClick={onClose} />
+      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(3,7,18,0.75)" }} onClick={onClose} />
       <div className="relative w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-fade-in"
-        style={{ background: "rgba(15,10,40,0.97)", border: "1px solid rgba(99,102,241,0.25)" }}>
+        style={{ background: "rgba(15,10,40,0.98)", border: "1px solid rgba(99,102,241,0.25)" }}>
         <div className="h-1 w-full" style={{ background: "linear-gradient(90deg,#818cf8,#6366f1,#60a5fa)" }} />
         <div className="px-8 pt-8 pb-8">
           <button onClick={onClose} className="absolute top-5 right-5 text-white/40 hover:text-white/70 transition-colors"><X size={18} /></button>
           <div className="mb-7 text-center">
             <div className="flex justify-center mb-4"><AtomLogo size={48} /></div>
-            <h2 className="text-xl font-bold text-white mb-1">{mode === "signin" ? "Welcome back" : "Join OmniProcure"}</h2>
-            <p className="text-sm text-white/50">{mode === "signin" ? "Sign in to generate Purchase Orders & track history" : "Start sourcing smarter with AI-powered procurement"}</p>
+            <h2 className="text-xl font-bold text-white mb-1">
+              {mode === "signin" ? "Welcome back" : "Join OmniProcure"}
+            </h2>
+            <p className="text-sm text-white/50">
+              {mode === "signin" ? "Sign in for 50 searches/day + PO generation" : "Start sourcing smarter"}
+            </p>
           </div>
+
           <button onClick={handleGoogle} disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 text-sm font-semibold text-white transition-all mb-4 disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 text-sm font-semibold text-white mb-4 disabled:opacity-60 transition-opacity"
             style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}>
             {googleLoading ? <Loader2 size={16} className="animate-spin" /> : (
               <svg width="18" height="18" viewBox="0 0 24 24">
@@ -183,125 +336,71 @@ function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
             )}
             Continue with Google
           </button>
+
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-            <span className="text-xs text-white/30 font-medium">or</span>
+            <span className="text-xs text-white/30">or</span>
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
           </div>
+
           <form onSubmit={handleEmail} className="space-y-3">
             <div>
               <label className="text-xs font-semibold text-white/50 mb-1.5 block">Email</label>
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
                 <Mail size={14} className="text-white/30 shrink-0" />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" required className="flex-1 text-sm text-white placeholder-white/20 outline-none bg-transparent" />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="you@company.com" required
+                  className="flex-1 text-sm text-white placeholder-white/20 outline-none bg-transparent" />
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-white/50 mb-1.5 block">Password</label>
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
                 <Lock size={14} className="text-white/30 shrink-0" />
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required className="flex-1 text-sm text-white placeholder-white/20 outline-none bg-transparent" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-white/30 hover:text-white/60 transition-colors">{showPassword ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                <input type={showPassword ? "text" : "password"} value={password}
+                  onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
+                  className="flex-1 text-sm text-white placeholder-white/20 outline-none bg-transparent" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-white/30 hover:text-white/60">
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
               </div>
             </div>
-            {error && <div className={`text-xs px-3 py-2 rounded-lg ${error.includes("Check your email") ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20" : "text-red-400 bg-red-400/10 border border-red-400/20"}`}>{error}</div>}
-            <button type="submit" disabled={loading} className="w-full py-3 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-60 flex items-center justify-center gap-2" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-              {loading ? <Loader2 size={15} className="animate-spin" /> : null}
+            {error && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${error.includes("Check")
+                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20"
+                : "text-red-400 bg-red-400/10 border border-red-400/20"}`}>
+                {error}
+              </div>
+            )}
+            <button type="submit" disabled={loading}
+              className="w-full py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+              {loading && <Loader2 size={15} className="animate-spin" />}
               {mode === "signin" ? "Sign in" : "Create account"}
             </button>
           </form>
+
           <div className="mt-4 text-center">
-            <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }} className="text-xs text-white/40 hover:text-white/60 transition-colors">
-              {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+            <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
+              className="text-xs text-white/40 hover:text-white/60">
+              {mode === "signin" ? "No account? " : "Have an account? "}
               <span className="text-indigo-400 font-semibold">{mode === "signin" ? "Sign up" : "Sign in"}</span>
             </button>
           </div>
           <div className="mt-5 pt-5 text-center" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <button onClick={onClose} className="text-xs text-white/25 hover:text-white/40 transition-colors">Continue as guest — search only, no PO generation</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Supplier Card ──────────────────────────────────────────────────────────────
-function SupplierCard({
-  supplier, partNumber, alternatives, onSearchAlternative,
-}: {
-  supplier: SupplierResult;
-  partNumber: string;
-  alternatives: AliasItem[];
-  onSearchAlternative: (mpn: string) => void;
-}) {
-  const isRecommended = supplier.recommended;
-  const hasNoStock = supplier.stock === 0;
-
-  return (
-    <div className="relative rounded-2xl p-5 transition-all animate-fade-in"
-      style={isRecommended
-        ? { background: "rgba(99,102,241,0.08)", border: "1.5px solid rgba(99,102,241,0.35)", boxShadow: "0 8px 40px rgba(99,102,241,0.15)" }
-        : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-      {isRecommended && (
-        <div className="absolute -top-3 left-5 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg"
-          style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-          <CheckCircle size={10} />Claude Pick
-        </div>
-      )}
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <h3 className="font-bold text-white/90 text-base">{supplier.name}</h3>
-          <p className="text-white/30 text-xs mt-0.5 font-mono">{partNumber}</p>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-white">${supplier.price.toFixed(3)}</div>
-          <div className="text-white/30 text-xs">per unit</div>
-        </div>
-      </div>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-white/40"><Package size={13} className="text-white/25" />Stock</div>
-          <StockBadge stock={supplier.stock} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-white/40"><Clock size={13} className="text-white/25" />Lead Time</div>
-          <span className="text-sm font-semibold text-white/70">{supplier.leadTime}</span>
-        </div>
-      </div>
-
-      {/* Clickable URL */}
-      <a href={supplier.url} target="_blank" rel="noopener noreferrer"
-        className="mt-4 pt-4 flex items-center gap-1.5 group transition-colors"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <span className="text-xs text-white/20 truncate flex-1 group-hover:text-indigo-400 transition-colors">{supplier.url}</span>
-        <ExternalLink size={11} className="text-white/15 group-hover:text-indigo-400 shrink-0 transition-colors" />
-      </a>
-
-      {/* Alternative suggestions for out-of-stock */}
-      {hasNoStock && alternatives.length > 0 && (
-        <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="flex items-center gap-1.5 mb-2">
-            <Lightbulb size={11} className="text-yellow-400" />
-            <span className="text-xs text-yellow-400/80 font-semibold">Alternative parts</span>
-          </div>
-          {alternatives.map((alt, i) => (
-            <button key={i} onClick={() => onSearchAlternative(alt.mpn)}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left mt-1 transition-all hover:scale-[1.01]"
-              style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.15)" }}>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-mono font-bold text-yellow-300">{alt.mpn}</div>
-                <div className="text-xs text-white/30 truncate">{alt.description}</div>
-              </div>
-              <ChevronRight size={12} className="text-yellow-400/50 shrink-0" />
+            <button onClick={onClose} className="text-xs text-white/25 hover:text-white/40">
+              Continue as guest (5 searches/day)
             </button>
-          ))}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function OmniProcure() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -310,20 +409,6 @@ export default function OmniProcure() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [suggestions, setSuggestions] = useState<CatalogItem[]>([]);
   const [selectedPart, setSelectedPart] = useState<CatalogItem | null>(null);
-  const [phase, setPhase] = useState<"idle" | "loading" | "results">("idle");
-  const [currentStatus, setCurrentStatus] = useState("");
-  const [statusLines, setStatusLines] = useState<string[]>([]);
-
-  // Streaming results state
-  const [searchingSuppliers, setSearchingSuppliers] = useState<string[]>([]);
-  const [streamedSuppliers, setStreamedSuppliers] = useState<SupplierResult[]>([]);
-  const [notFoundSuppliers, setNotFoundSuppliers] = useState<string[]>([]);
-  const [alternatives, setAlternatives] = useState<AlternativeSet[]>([]);
-  const [recommendation, setRecommendation] = useState<{ winner: string; reason: string } | null>(null);
-  const [partNumber, setPartNumber] = useState("");
-  const [aliases, setAliases] = useState<AliasItem[]>([]);
-  const [notFound, setNotFound] = useState(false);
-
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -331,42 +416,63 @@ export default function OmniProcure() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
-  // Auth
+  const [phase, setPhase] = useState<SearchPhase>("idle");
+  const [searching, setSearching] = useState<Array<{ name: string; tier: "standard" | "chinese" }>>([]);
+  const [found, setFound] = useState<SupplierResult[]>([]);
+  const [notFound, setNotFound] = useState<string[]>([]);
+  const [recommendation, setRecommendation] = useState<ClaudeRanking | null>(null);
+  const [cached, setCached] = useState(false);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [currentMpn, setCurrentMpn] = useState("");
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); return; }
-    supabase.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); setAuthLoading(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null));
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) =>
+      setUser(session?.user ?? null)
+    );
     return () => subscription.unsubscribe();
   }, []);
 
-  // History
+  // ── History ───────────────────────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
     if (!supabase || !user) { setSearchHistory([]); return; }
     try {
-      const { data } = await supabase.from("search_history").select("id, part_number, searched_at").eq("user_id", user.id).order("searched_at", { ascending: false });
-      setSearchHistory(data as HistoryItem[] ?? []);
+      const { data } = await supabase
+        .from("search_history").select("id, part_number, searched_at")
+        .eq("user_id", user.id).order("searched_at", { ascending: false }).limit(20);
+      setSearchHistory((data as HistoryItem[]) ?? []);
     } catch { setSearchHistory([]); }
   }, [user]);
+
   useEffect(() => { loadHistory(); }, [loadHistory]);
+
   useEffect(() => {
-    function handleClick(e: MouseEvent) { if (historyRef.current && !historyRef.current.contains(e.target as Node)) setHistoryOpen(false); }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    const h = (e: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) setHistoryOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Catalog
+  // ── Catalog ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    async function loadCatalog() {
+    async function load() {
       if (!supabase) { setCatalog(FALLBACK_CATALOG); return; }
       try {
-        const { data, error } = await supabase.from("supplier_catalog").select("part, desc").limit(50);
+        const { data, error } = await supabase.from("supplier_catalog").select("part, desc").limit(100);
         if (error || !data?.length) throw new Error();
         setCatalog(data as CatalogItem[]);
       } catch { setCatalog(FALLBACK_CATALOG); }
     }
-    loadCatalog();
+    load();
   }, []);
 
+  // ── Suggestions ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!query.trim() || selectedPart) { setSuggestions([]); return; }
     const q = query.toLowerCase();
@@ -375,13 +481,8 @@ export default function OmniProcure() {
 
   const handleSignOut = async () => {
     if (!supabase) return;
-    await supabase.auth.signOut(); setUser(null); setToast("Signed out successfully");
+    await supabase.auth.signOut(); setUser(null); setToast("Signed out");
   };
-
-  const saveToHistory = useCallback(async (pn: string) => {
-    if (!supabase || !user) return;
-    try { await (supabase as any).from("search_history").insert({ user_id: user.id, part_number: pn }); loadHistory(); } catch {}
-  }, [user, loadHistory]);
 
   const clearHistory = useCallback(async () => {
     if (!supabase || !user) return;
@@ -390,256 +491,303 @@ export default function OmniProcure() {
 
   const deleteHistoryItem = useCallback(async (id: string) => {
     if (!supabase) return;
-    try { await (supabase as any).from("search_history").delete().eq("id", id); setSearchHistory(prev => prev.filter(h => h.id !== id)); } catch {}
+    try {
+      await (supabase as any).from("search_history").delete().eq("id", id);
+      setSearchHistory(prev => prev.filter(h => h.id !== id));
+    } catch {}
   }, []);
 
-  // ── Streaming run sequence ──────────────────────────────────────────────────
-  const runSequence = useCallback(async (part: CatalogItem) => {
-    setSelectedPart(part); setQuery(part.part); setSuggestions([]);
-    setPhase("loading"); setStatusLines([]); setCurrentStatus("Initializing Tinyfish Agents...");
-    setSearchingSuppliers([]); setStreamedSuppliers([]); setNotFoundSuppliers([]); setAlternatives([]);
-    setRecommendation(null); setAliases([]); setNotFound(false);
-    setPartNumber(part.part);
+  // ── Main search ───────────────────────────────────────────────────────────
+  const runSearch = useCallback(async (mpn: string) => {
+    const clean = mpn.trim().toUpperCase();
+    setCurrentMpn(clean);
+    setSelectedPart({ part: clean, desc: "" });
+    setQuery(clean);
+    setSuggestions([]);
+    setPhase("searching");
+    setSearching([]);
+    setFound([]);
+    setNotFound([]);
+    setRecommendation(null);
+    setCached(false);
+    setCachedAt(null);
 
-    // Animate status while streaming
-    let done = false;
-    const animateStatus = async () => {
-      for (let i = 0; i < WAITING_LINES.length; i++) {
-        if (done) break;
-        setCurrentStatus(WAITING_LINES[i]);
-        setStatusLines(prev => i > 0 ? [...prev, WAITING_LINES[i - 1]] : prev);
-        await new Promise(r => setTimeout(r, 600 + Math.random() * 300));
-      }
-      let li = 0;
-      while (!done) {
-        await new Promise(r => setTimeout(r, 900 + Math.random() * 400));
-        if (done) break;
-        setCurrentStatus(LOOPING_LINES[li % LOOPING_LINES.length]); li++;
-      }
-    };
-    animateStatus();
+    if (supabase && user) {
+      try {
+        await (supabase as any).from("search_history").insert({ user_id: user.id, part_number: clean });
+        loadHistory();
+      } catch {}
+    }
 
     try {
-      const res = await fetch("/api/procure-stream", {
+      const res = await fetch("/api/small-suppliers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partNumber: part.part }),
+        body: JSON.stringify({ mpn: clean, userId: user?.id ?? null }),
       });
-
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) { setPhase("error"); return; }
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      let buf = "";
 
       while (true) {
-        const { done: streamDone, value } = await reader.read();
-        if (streamDone) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
 
         for (const line of lines) {
           if (!line.startsWith("data:")) continue;
           const raw = line.slice(5).trim();
           if (!raw) continue;
           try {
-            const event = JSON.parse(raw);
-
-            if (event.type === "supplier_searching") {
-              setSearchingSuppliers(prev => [...prev, event.name]);
-              setPhase("results");
+            const ev = JSON.parse(raw);
+            if (ev.type === "supplier_searching") {
+              setSearching(prev => [...prev, { name: ev.name, tier: ev.tier ?? "standard" }]);
             }
-            if (event.type === "supplier_found") {
-              setStreamedSuppliers(prev => [...prev, event.supplier]);
-              setPhase("results"); // Show results section as soon as first supplier arrives
+            if (ev.type === "supplier_found") {
+              setFound(prev => [...prev, ev.supplier]);
             }
-            if (event.type === "supplier_not_found") {
-              setNotFoundSuppliers(prev => [...prev, event.name]);
+            if (ev.type === "supplier_not_found") {
+              setNotFound(prev => [...prev, ev.name]);
             }
-            if (event.type === "alternatives") {
-              setAlternatives(prev => [...prev, { forSupplier: event.forSupplier, alternatives: event.alternatives }]);
+            if (ev.type === "complete") {
+              setRecommendation(ev.recommendation ?? null);
+              setCached(ev.cached ?? false);
+              setCachedAt(ev.cachedAt ?? null);
+              if (ev.recommendation && ev.suppliers) {
+                const rec = ev.recommendation as ClaudeRanking;
+                setFound((ev.suppliers as SupplierResult[]).map((s, i) => ({
+                  ...s, recommended: i === rec.recommendedIndex,
+                })));
+              }
+              setPhase("done");
             }
-            if (event.type === "analyzing") {
-              setCurrentStatus("Claude AI is comparing suppliers...");
-            }
-            if (event.type === "complete") {
-              setStreamedSuppliers(event.suppliers);
-              setRecommendation(event.recommendation);
-              saveToHistory(part.part);
-            }
-            if (event.type === "not_found") {
-              setNotFound(true);
-              setAliases(event.aliases ?? []);
-              setPhase("results");
-            }
+            if (ev.type === "error") setPhase("error");
           } catch {}
         }
       }
-    } catch (err) {
-      setNotFound(true); setPhase("results");
-    } finally {
-      done = true;
-    }
-  }, [saveToHistory]);
+      setPhase("done");
+    } catch { setPhase("error"); }
+  }, [user, loadHistory]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && query.trim() && !selectedPart)
-      runSequence({ part: query.trim().toUpperCase(), desc: "Custom MPN search" });
-  }, [query, selectedPart, runSequence]);
+    if (e.key === "Enter" && query.trim() && !selectedPart) runSearch(query.trim());
+  }, [query, selectedPart, runSearch]);
 
+  const reset = () => {
+    setQuery(""); setSelectedPart(null); setCurrentMpn("");
+    setPhase("idle");
+    setSearching([]); setFound([]); setNotFound([]);
+    setRecommendation(null); setCached(false); setCachedAt(null);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  // ── PDF ───────────────────────────────────────────────────────────────────
   const generatePDF = useCallback(async () => {
-    if (!streamedSuppliers.length) return;
+    const winner = found.find(s => s.recommended) ?? found[0];
+    if (!winner) return;
     const { default: jsPDF } = await import("jspdf");
     const { default: autoTable } = await import("jspdf-autotable");
-    const winner = streamedSuppliers.find(s => s.recommended) || streamedSuppliers[0];
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const poNumber = `PO-${Date.now().toString().slice(-8)}`;
     const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
-    doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 40, "F");
+    doc.setFillColor(15,23,42); doc.rect(0,0,210,40,"F");
     doc.setTextColor(255,255,255); doc.setFontSize(22); doc.setFont("helvetica","bold");
-    doc.text("OMNIPROCURE", 14, 18);
+    doc.text("OMNIPROCURE",14,18);
     doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(148,163,184);
-    doc.text("Autonomous B2B Procurement Platform", 14, 26);
+    doc.text("Autonomous B2B Procurement Platform",14,26);
     doc.setTextColor(255,255,255); doc.setFontSize(14); doc.setFont("helvetica","bold");
-    doc.text("PURCHASE ORDER", 196, 18, { align: "right" });
-    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.text(poNumber, 196, 26, { align: "right" });
+    doc.text("PURCHASE ORDER",196,18,{align:"right"});
+    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.text(poNumber,196,26,{align:"right"});
 
-    doc.setTextColor(30,41,59); doc.setFontSize(9); doc.setFont("helvetica","bold");
-    doc.text("FROM", 14, 52); doc.setFont("helvetica","normal"); doc.setTextColor(71,85,105);
-    doc.text("Acme Electronics Ltd.", 14, 58); doc.text("12 Innovation Park, Pune 411057", 14, 63);
-    doc.text("GST: 27AABCA1234F1Z5", 14, 68); doc.text("procurement@acme-electronics.com", 14, 73);
-
-    doc.setTextColor(30,41,59); doc.setFont("helvetica","bold"); doc.text("SUPPLIER", 110, 52);
+    doc.setTextColor(30,41,59); doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.text("FROM",14,52);
     doc.setFont("helvetica","normal"); doc.setTextColor(71,85,105);
-    doc.text(winner.name, 110, 58); doc.text(`Lead Time: ${winner.leadTime}`, 110, 63);
-    doc.text(`Stock: ${winner.stock.toLocaleString()} units`, 110, 68);
+    doc.text("Acme Electronics Ltd.",14,58); doc.text("12 Innovation Park, Pune 411057",14,63);
+    doc.text("GST: 27AABCA1234F1Z5",14,68); doc.text("procurement@acme-electronics.com",14,73);
 
-    doc.setDrawColor(226,232,240); doc.setLineWidth(0.3); doc.line(14, 80, 196, 80);
+    doc.setTextColor(30,41,59); doc.setFont("helvetica","bold"); doc.text("SUPPLIER",110,52);
+    doc.setFont("helvetica","normal"); doc.setTextColor(71,85,105);
+    doc.text(winner.supplier,110,58);
+    doc.text(`Platform: ${winner.tier==="chinese"?"Chinese Marketplace":"Authorized Distributor"}`,110,63);
+    doc.text(`Stock: ${winner.stock.toLocaleString()} units`,110,68);
+    doc.text(`Lead Time: ${winner.leadTime}`,110,73);
+
+    doc.setDrawColor(226,232,240); doc.setLineWidth(0.3); doc.line(14,80,196,80);
     doc.setFontSize(9); doc.setTextColor(71,85,105);
-    doc.text(`Issue Date: ${today}`, 14, 87); doc.text(`Valid For: 30 Days`, 100, 87); doc.text(`Currency: ${winner.currency}`, 160, 87);
+    doc.text(`Issue Date: ${today}`,14,87); doc.text("Valid For: 30 Days",100,87); doc.text(`Currency: ${winner.currency}`,160,87);
 
-    autoTable(doc, {
-      startY: 95,
-      head: [["#","Part Number","Description","Qty","Unit Price","Total"]],
-      body: [["1", partNumber, winner.name, "100", `${winner.currency} ${winner.price.toFixed(2)}`, `${winner.currency} ${(winner.price*100).toFixed(2)}`]],
-      headStyles: { fillColor: [15,23,42], textColor: 255, fontStyle: "bold", fontSize: 9 },
-      bodyStyles: { fontSize: 9, textColor: [30,41,59] },
-      alternateRowStyles: { fillColor: [248,250,252] },
-      columnStyles: { 0:{cellWidth:10}, 1:{cellWidth:38}, 4:{halign:"right"}, 5:{halign:"right"} },
+    autoTable(doc,{
+      startY:95,
+      head:[["#","Part Number","Supplier","Platform","Unit Price","MOQ","Total (MOQ)"]],
+      body:[["1",currentMpn,winner.supplier,winner.tier==="chinese"?"Chinese":"Standard",
+        `${winner.currency} ${winner.price?.toFixed(winner.currency==="CNY"?2:3)??"TBD"}`,
+        String(winner.moq),`${winner.currency} ${((winner.price??0)*winner.moq).toFixed(2)}`]],
+      headStyles:{fillColor:[15,23,42],textColor:255,fontStyle:"bold",fontSize:8},
+      bodyStyles:{fontSize:8,textColor:[30,41,59]},
+      alternateRowStyles:{fillColor:[248,250,252]},
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(9); doc.setTextColor(71,85,105);
-    doc.text("Subtotal:", 140, finalY); doc.text(`${winner.currency} ${(winner.price*100).toFixed(2)}`, 196, finalY, {align:"right"});
-    doc.text("GST (18%):", 140, finalY+6); doc.text(`${winner.currency} ${(winner.price*100*0.18).toFixed(2)}`, 196, finalY+6, {align:"right"});
-    doc.setDrawColor(226,232,240); doc.line(140, finalY+9, 196, finalY+9);
-    doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.setFontSize(10);
-    doc.text("TOTAL:", 140, finalY+15); doc.text(`${winner.currency} ${(winner.price*100*1.18).toFixed(2)}`, 196, finalY+15, {align:"right"});
-
-    doc.setFillColor(74,111,165); doc.roundedRect(14, finalY, 90, 18, 2, 2, "F");
-    doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont("helvetica","bold");
-    doc.text("CLAUDE AI RECOMMENDED SUPPLIER", 17, finalY+7);
-    doc.setFont("helvetica","normal"); doc.setFontSize(7.5);
-    if (recommendation) doc.text(recommendation.reason.slice(0, 60), 17, finalY+13);
-
-    doc.setFillColor(248,250,252); doc.rect(0, 270, 210, 27, "F");
+    const finalY=(doc as any).lastAutoTable.finalY+10;
+    if(recommendation){
+      doc.setFillColor(74,111,165); doc.roundedRect(14,finalY,130,14,2,2,"F");
+      doc.setTextColor(255,255,255); doc.setFontSize(7.5); doc.setFont("helvetica","bold");
+      doc.text("AI RECOMMENDED — "+recommendation.reason.slice(0,75),17,finalY+9);
+    }
+    doc.setFillColor(248,250,252); doc.rect(0,270,210,27,"F");
     doc.setTextColor(148,163,184); doc.setFontSize(7.5); doc.setFont("helvetica","normal");
-    doc.text("Auto-generated by OmniProcure AI. Verify pricing before submission.", 105, 278, {align:"center"});
-    doc.text("OmniProcure · Powered by Tinyfish + Claude AI · omniprocure.ai", 105, 284, {align:"center"});
-
-    doc.save(`Purchase_Order_${partNumber}.pdf`);
+    doc.text("Auto-generated by OmniProcure AI. Verify pricing before submission.",105,278,{align:"center"});
+    doc.text("OmniProcure · TinyFish Search+Fetch · Claude AI · omniprocure.online",105,284,{align:"center"});
+    doc.save(`Purchase_Order_${currentMpn}.pdf`);
     setToast("PO Generated Successfully");
-  }, [streamedSuppliers, partNumber, recommendation]);
+  }, [found, currentMpn, recommendation]);
 
-  const handlePDFClick = useCallback(() => {
+  const handlePDFClick = () => {
     if (!user) { setShowAuthModal(true); return; }
     generatePDF();
-  }, [user, generatePDF]);
-
-  const reset = () => {
-    setQuery(""); setSelectedPart(null); setPhase("idle");
-    setSearchingSuppliers([]); setStreamedSuppliers([]); setNotFoundSuppliers([]); setAlternatives([]);
-    setRecommendation(null); setAliases([]); setNotFound(false); setPartNumber("");
-    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const glass = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" };
-  const userInitials = user?.email?.slice(0, 2).toUpperCase() ?? "";
+  const hasResults = phase !== "idle";
+  const userInitials = user?.email?.slice(0,2).toUpperCase() ?? "";
+
+  // Use searching state if available, else fallback to SUPPLIER_NAMES
+  const displaySuppliers = searching.length > 0 ? searching : SUPPLIER_NAMES;
 
   return (
-    <div className="min-h-screen font-sans" style={{ fontFamily: "var(--font-geist), system-ui, sans-serif", background: "linear-gradient(135deg, #030712 0%, #0f0a2e 40%, #0c1445 70%, #030712 100%)" }}>
-      {/* Ambient glows */}
+    <div className="min-h-screen font-sans"
+      style={{ fontFamily:"var(--font-geist),system-ui,sans-serif", background:"linear-gradient(135deg,#030712 0%,#0f0a2e 40%,#0c1445 70%,#030712 100%)" }}>
+
+      {/* Background glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #4338ca 0%, transparent 70%)", filter: "blur(80px)" }} />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #1d4ed8 0%, transparent 70%)", filter: "blur(100px)" }} />
-        <div className="absolute top-[40%] left-[50%] w-[30vw] h-[30vw] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(60px)" }} />
+        <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full opacity-20"
+          style={{ background:"radial-gradient(circle,#4338ca 0%,transparent 70%)", filter:"blur(80px)" }} />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full opacity-15"
+          style={{ background:"radial-gradient(circle,#1d4ed8 0%,transparent 70%)", filter:"blur(100px)" }} />
       </div>
 
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} onSuccess={() => { setToast("Signed in! You can now generate POs."); setTimeout(() => generatePDF(), 300); }} />}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} onSuccess={() => setToast("Signed in!")} />}
 
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-40 h-16 flex items-center justify-between px-6"
-        style={{ background: "rgba(3,7,18,0.7)", borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)" }}>
+        style={{ background:"rgba(3,7,18,0.75)", borderBottom:"1px solid rgba(255,255,255,0.07)", backdropFilter:"blur(20px)" }}>
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors mr-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></Link>
+          <Link href="/" className="flex items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors mr-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </Link>
           <AtomLogo size={28} />
           <span className="font-bold text-[16px] tracking-tight text-white">OmniProcure</span>
           <span className="hidden sm:block text-white/15 text-sm mx-1">|</span>
-          <span className="hidden sm:block text-white/40 text-xs font-medium tracking-wide">Command Center</span>
+          <span className="hidden sm:block text-white/40 text-xs font-medium">Command Center</span>
         </div>
+
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>
-            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" /></span>
-            <span className="text-xs text-emerald-400 font-semibold">Live: Operational</span>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full"
+            style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.2)" }}>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="text-xs text-emerald-400 font-semibold">Live</span>
           </div>
-          {authLoading ? <Loader2 size={15} className="animate-spin text-white/40" /> : user ? (
+
+          {cached && phase === "done" && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"
+              style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", color:"#a5b4fc" }}>
+              ⚡ Cached
+            </div>
+          )}
+
+          {authLoading ? (
+            <Loader2 size={15} className="animate-spin text-white/40" />
+          ) : user ? (
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: "linear-gradient(135deg,#6366f1,#4f46e5)" }}>{userInitials}</div>
-                <span className="text-xs text-white/60 font-medium max-w-[130px] truncate">{user.email}</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+                style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)" }}>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                  style={{ background:"linear-gradient(135deg,#6366f1,#4f46e5)" }}>{userInitials}</div>
+                <span className="text-xs text-white/60 max-w-[120px] truncate">{user.email}</span>
               </div>
-              <button onClick={handleSignOut} className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-red-500/10" style={{ border: "1px solid rgba(255,255,255,0.08)" }} title="Sign out"><LogOut size={13} className="text-white/40" /></button>
+              <button onClick={handleSignOut}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-500/10 transition-colors"
+                style={{ border:"1px solid rgba(255,255,255,0.08)" }}>
+                <LogOut size={13} className="text-white/40" />
+              </button>
             </div>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} className="text-xs font-semibold text-white px-4 py-2 rounded-xl transition-all" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>Sign in</button>
+            <button onClick={() => setShowAuthModal(true)}
+              className="text-xs font-semibold text-white px-4 py-2 rounded-xl transition-opacity hover:opacity-90"
+              style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+              Sign in
+            </button>
           )}
-          <button onClick={() => setSettingsOpen(true)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/5" style={{ border: "1px solid rgba(255,255,255,0.08)" }}><Settings size={15} className="text-white/40" /></button>
+
+          <button onClick={() => setSettingsOpen(true)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors"
+            style={{ border:"1px solid rgba(255,255,255,0.08)" }}>
+            <Settings size={15} className="text-white/40" />
+          </button>
         </div>
       </nav>
 
-      {/* Main */}
-      <main className="relative z-10 pt-16 min-h-screen flex flex-col items-center px-4">
+      <main className="relative z-10 pt-16 min-h-screen flex flex-col items-center px-4 pb-16">
+
         {/* Hero */}
-        <div className="mt-20 mb-14 text-center">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full mb-6" style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc" }}>
-            <Zap size={11} />Powered by Tinyfish + Claude AI
+        <div className="mt-14 mb-10 text-center">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full mb-5"
+            style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", color:"#a5b4fc" }}>
+            <Zap size={11} />TinyFish Search + Fetch · Claude AI
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-white mb-3">Autonomous Parts Sourcing</h1>
-          <p className="text-white/50 text-sm max-w-md mx-auto leading-relaxed">Enter a Manufacturer Part Number. AI agents browse Mouser, DigiKey & LCSC live, compare pricing and stock in real-time.</p>
+          <p className="text-white/50 text-sm max-w-xl mx-auto leading-relaxed">
+            Enter any MPN.{" "}
+            <span className="text-indigo-400 font-semibold">LCSC & UTSource</span>{" "}
+            plus{" "}
+            <span className="text-orange-400 font-semibold">Alibaba</span>
+            {" "}— searched in parallel. Claude AI picks the winner.
+          </p>
           {!user && !authLoading && (
-            <p className="text-xs text-white/30 mt-3">Search is free. <button onClick={() => setShowAuthModal(true)} className="font-semibold underline underline-offset-2 text-indigo-400">Sign in</button> to generate Purchase Orders.</p>
+            <p className="text-xs text-white/25 mt-3">
+              Guest: 5 searches/day.{" "}
+              <button onClick={() => setShowAuthModal(true)} className="text-indigo-400 underline">Sign in</button>
+              {" "}for 50/day + PO generation.
+            </p>
           )}
         </div>
 
-        {/* Search */}
-        <div className="w-full max-w-2xl relative">
+        {/* Search box */}
+        <div className="w-full max-w-2xl relative mb-8">
           <div className="flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all"
             style={selectedPart
-              ? { background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(99,102,241,0.5)", boxShadow: "0 0 30px rgba(99,102,241,0.15)" }
-              : { background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.1)" }}>
-            {selectedPart ? <Lock size={16} className="text-indigo-400 shrink-0" /> : <Search size={16} className="text-white/30 shrink-0" />}
-            <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown}
-              disabled={!!selectedPart} placeholder="Enter Manufacturer Part Number (MPN)…"
-              className="flex-1 bg-transparent text-white placeholder-white/25 text-sm outline-none font-mono disabled:cursor-not-allowed" autoComplete="off" />
+              ? { background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(99,102,241,0.5)", boxShadow:"0 0 30px rgba(99,102,241,0.15)" }
+              : { background:"rgba(255,255,255,0.05)", border:"1.5px solid rgba(255,255,255,0.1)" }}>
             {selectedPart
-              ? <button onClick={reset} className="text-white/30 hover:text-white/60 transition-colors"><X size={15} /></button>
-              : query.trim() && <button onClick={() => runSequence({ part: query.trim().toUpperCase(), desc: "Custom MPN" })} className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>Search</button>
-            }
+              ? <Lock size={16} className="text-indigo-400 shrink-0" />
+              : <Search size={16} className="text-white/30 shrink-0" />}
+            <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown} disabled={!!selectedPart}
+              placeholder="Enter MPN e.g. STM32F103C8T6, LM358DR2G…"
+              className="flex-1 bg-transparent text-white placeholder-white/25 text-sm outline-none font-mono disabled:cursor-not-allowed"
+              autoComplete="off" />
+            {selectedPart ? (
+              <button onClick={reset} className="text-white/30 hover:text-white/60 transition-colors"><X size={15} /></button>
+            ) : query.trim() ? (
+              <button onClick={() => runSearch(query.trim())}
+                className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90"
+                style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+                Search
+              </button>
+            ) : null}
             {user && !selectedPart && (
-              <button onClick={() => setHistoryOpen(h => !h)} className="ml-1 w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0"
-                style={historyOpen ? { background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)" } : { border: "1px solid rgba(255,255,255,0.08)" }} title="Search history">
+              <button onClick={() => setHistoryOpen(h => !h)}
+                className="ml-1 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors"
+                style={historyOpen
+                  ? { background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.4)" }
+                  : { border:"1px solid rgba(255,255,255,0.08)" }}>
                 <History size={14} className={historyOpen ? "text-indigo-400" : "text-white/30"} />
               </button>
             )}
@@ -647,22 +795,48 @@ export default function OmniProcure() {
 
           {/* History dropdown */}
           {user && historyOpen && !selectedPart && (
-            <div ref={historyRef} className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30 animate-fade-in"
-              style={{ background: "rgba(10,8,30,0.97)", border: "1px solid rgba(99,102,241,0.2)", backdropFilter: "blur(20px)" }}>
-              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <div className="flex items-center gap-2"><History size={13} className="text-indigo-400" /><span className="text-xs font-bold text-white/70">Recent Searches</span><span className="text-xs text-white/25">({searchHistory.length})</span></div>
-                {searchHistory.length > 0 && <button onClick={clearHistory} className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 transition-colors font-medium"><Trash2 size={11} />Clear all</button>}
+            <div ref={historyRef}
+              className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30 animate-fade-in"
+              style={{ background:"rgba(10,8,30,0.97)", border:"1px solid rgba(99,102,241,0.2)", backdropFilter:"blur(20px)" }}>
+              <div className="flex items-center justify-between px-4 py-3"
+                style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                <div className="flex items-center gap-2">
+                  <History size={13} className="text-indigo-400" />
+                  <span className="text-xs font-bold text-white/70">Recent</span>
+                  <span className="text-xs text-white/25">({searchHistory.length})</span>
+                </div>
+                {searchHistory.length > 0 && (
+                  <button onClick={clearHistory} className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 font-medium">
+                    <Trash2 size={11} />Clear
+                  </button>
+                )}
               </div>
-              {searchHistory.length === 0 ? <div className="px-4 py-6 text-center text-xs text-white/25">No searches yet</div> : (
-                <div className="max-h-72 overflow-y-auto">
+              {searchHistory.length === 0 ? (
+                <div className="px-4 py-5 text-center text-xs text-white/25">No searches yet</div>
+              ) : (
+                <div className="max-h-56 overflow-y-auto">
                   {searchHistory.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 group transition-colors" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                      <button className="flex items-center gap-3 flex-1 text-left" onClick={() => { setHistoryOpen(false); runSequence({ part: item.part_number, desc: "From history" }); }}>
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.2)" }}><RotateCcw size={12} className="text-indigo-400" /></div>
-                        <div><div className="text-sm font-mono font-semibold text-white/80">{item.part_number}</div><div className="text-xs text-white/30">{new Date(item.searched_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div></div>
+                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 group cursor-pointer transition-colors"
+                      style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                      <button className="flex items-center gap-3 flex-1 text-left"
+                        onClick={() => { setHistoryOpen(false); runSearch(item.part_number); }}>
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.2)" }}>
+                          <RotateCcw size={12} className="text-indigo-400" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-mono font-semibold text-white/80">{item.part_number}</div>
+                          <div className="text-xs text-white/30">
+                            {new Date(item.searched_at).toLocaleDateString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}
+                          </div>
+                        </div>
                       </button>
-                      <button onClick={() => deleteHistoryItem(item.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-red-400"><X size={13} /></button>
+                      <button onClick={() => deleteHistoryItem(item.id)}
+                        className="opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 transition-all">
+                        <X size={13} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -671,222 +845,203 @@ export default function OmniProcure() {
           )}
 
           {/* Suggestions dropdown */}
-          {query.trim() && !selectedPart && (
-            <div className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30"
-              style={{ background: "rgba(10,8,30,0.97)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}>
+          {query.trim() && !selectedPart && suggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30 animate-fade-in"
+              style={{ background:"rgba(10,8,30,0.97)", border:"1px solid rgba(255,255,255,0.08)", backdropFilter:"blur(20px)" }}>
               {suggestions.map((item, i) => (
-                <button key={i} onClick={() => runSequence(item)} className="w-full flex items-center gap-3 px-4 py-3 transition-colors text-left" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}><Package size={13} className="text-indigo-400" /></div>
-                  <div><div className="text-sm font-mono font-semibold text-white/80">{item.part}</div><div className="text-xs text-white/30">{item.desc}</div></div>
+                <button key={i} onClick={() => runSearch(item.part)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                  style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background:"rgba(99,102,241,0.12)", border:"1px solid rgba(99,102,241,0.2)" }}>
+                    <Package size={13} className="text-indigo-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-mono font-semibold text-white/80">{item.part}</div>
+                    <div className="text-xs text-white/30">{item.desc}</div>
+                  </div>
                   <ChevronRight size={14} className="text-white/20 ml-auto" />
                 </button>
               ))}
-              <button onClick={() => runSequence({ part: query.trim().toUpperCase(), desc: "Custom MPN search" })} className="w-full flex items-center gap-3 px-4 py-3 transition-colors text-left" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,0.08)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}><Search size={13} className="text-white" /></div>
-                <div><div className="text-sm font-mono font-semibold text-indigo-400">Search &quot;{query.trim().toUpperCase()}&quot;</div><div className="text-xs text-white/30">Live search across Mouser, DigiKey &amp; LCSC</div></div>
+              <button onClick={() => runSearch(query.trim())}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                style={{ borderTop:"1px solid rgba(255,255,255,0.06)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,0.08)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+                  <Search size={13} className="text-white" />
+                </div>
+                <div>
+                  <div className="text-sm font-mono font-semibold text-indigo-400">Search &quot;{query.trim().toUpperCase()}&quot;</div>
+                  <div className="text-xs text-white/30">Search all 3 supplier networks</div>
+                </div>
                 <ChevronRight size={14} className="text-indigo-400/50 ml-auto" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Loading status bar */}
-        {phase === "loading" && (
-          <div className="w-full max-w-2xl mt-6 animate-fade-in">
-            <div className="rounded-2xl p-6" style={glass}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-                  <Loader2 size={15} className="text-white animate-spin" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-white/80">Agent sourcing in progress</div>
-                  <div className="text-xs text-white/35">Cards appear as each supplier responds</div>
-                </div>
-                <div className="ml-auto flex gap-1">{[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "#818cf8", animationDelay: `${i*0.15}s` }} />)}</div>
-              </div>
-              <div className="rounded-xl px-4 py-3 mb-3" style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)" }}>
+        {/* ── RESULTS ── */}
+        {hasResults && (
+          <div className="w-full max-w-5xl space-y-6">
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full animate-pulse bg-indigo-400" />
-                  <span className="text-xs font-mono font-medium text-indigo-300">{currentStatus}</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                    style={{ background:"rgba(99,102,241,0.12)", border:"1px solid rgba(99,102,241,0.25)", color:"#a5b4fc" }}>
+                    <Cpu size={11} />Standard
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                    style={{ background:"rgba(249,115,22,0.10)", border:"1px solid rgba(249,115,22,0.25)", color:"#fb923c" }}>
+                    <ShoppingCart size={11} />Chinese
+                  </div>
                 </div>
+                {phase === "searching" && (
+                  <div className="flex items-center gap-2 text-xs text-white/40">
+                    <Loader2 size={12} className="animate-spin text-indigo-400" />
+                    Searching in parallel…
+                  </div>
+                )}
+                {phase === "done" && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                    <CheckCircle size={12} />
+                    {found.length} found
+                    {cached && cachedAt && (
+                      <span className="text-white/25 font-normal ml-1">
+                        · cached {new Date(cachedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {statusLines.length > 0 && (
-                <div className="space-y-1.5 mb-3">
-                  {statusLines.slice(-3).map((line, i) => <div key={i} className="flex items-center gap-2"><CheckCircle size={12} className="text-emerald-400 shrink-0" /><span className="text-xs text-white/30 font-mono">{line}</span></div>)}
-                </div>
-              )}
-              {/* Supplier status pills */}
-              <div className="flex gap-2 flex-wrap">
-                {["Mouser Electronics", "DigiKey", "LCSC"].map(name => {
-                  const found = streamedSuppliers.find(s => s.name === name);
-                  const notFoundS = notFoundSuppliers.includes(name);
-                  return (
-                    <div key={name} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                      style={found ? { background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", color: "#34d399" }
-                        : notFoundS ? { background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171" }
-                        : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.3)" }}>
-                      {found ? <CheckCircle size={10} /> : notFoundS ? <X size={10} /> : <Loader2 size={10} className="animate-spin" />}
-                      {name}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="mt-4 h-px rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-                <div className="h-full rounded-full animate-progress" style={{ background: "linear-gradient(90deg,#6366f1,#818cf8,#60a5fa)" }} />
-              </div>
+              <div className="text-xs text-white/20 font-mono">{currentMpn}</div>
             </div>
-          </div>
-        )}
 
-        {/* Results — show as they stream in */}
-        {(phase === "results" || (phase === "loading" && streamedSuppliers.length > 0)) && !notFound && (
-          <div className="w-full max-w-3xl mt-6 space-y-4">
-            {/* Recommendation banner — only when complete */}
-            {recommendation && (
-              <div className="rounded-2xl px-5 py-4 flex items-start gap-3 animate-fade-in" style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)" }}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}><Star size={14} className="text-white" /></div>
-                <div>
-                  <div className="font-semibold text-sm mb-0.5 text-white/90">Claude AI Recommendation</div>
+            {/* Claude recommendation banner */}
+            {recommendation && found.length > 0 && (
+              <div className="rounded-2xl px-5 py-4 flex items-start gap-3 animate-fade-in"
+                style={{ background:"rgba(99,102,241,0.08)", border:"1px solid rgba(99,102,241,0.2)" }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+                  <Star size={14} className="text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-sm text-white/90 mb-0.5">Claude AI Recommendation</div>
                   <div className="text-sm text-white/50">{recommendation.reason}</div>
                 </div>
-                <div className="text-xs font-mono shrink-0 text-indigo-400">{partNumber}</div>
+                <div className="text-xs font-bold px-2 py-1 rounded-lg text-indigo-300"
+                  style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.2)" }}>
+                  {recommendation.winner}
+                </div>
               </div>
             )}
 
-            {/* Supplier cards — appear immediately, fill in when data arrives */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {searchingSuppliers.map((name) => {
-                const found = streamedSuppliers.find(s => s.name === name);
-                const notFoundS = notFoundSuppliers.includes(name);
-                if (found) return (
-                  <SupplierCard key={name} supplier={found} partNumber={partNumber}
-                    alternatives={alternatives.find(a => a.forSupplier === name)?.alternatives ?? []}
-                    onSearchAlternative={mpn => { reset(); setTimeout(() => runSequence({ part: mpn, desc: "Alternative part" }), 100); }} />
-                );
-                return (
-                  <div key={name} className="rounded-2xl p-5 animate-fade-in"
-                    style={notFoundS
-                      ? { background: "rgba(248,113,113,0.04)", border: "1px solid rgba(248,113,113,0.15)" }
-                      : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <div className="font-bold text-white/80 text-base">{name}</div>
-                        <div className="text-white/30 text-xs mt-0.5 font-mono">{partNumber}</div>
-                      </div>
-                      {notFoundS
-                        ? <span className="text-xs text-red-400/70 font-medium px-2 py-1 rounded-full" style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}>Not Found</span>
-                        : <Loader2 size={16} className="text-indigo-400 animate-spin" />
-                      }
-                    </div>
-                    {notFoundS ? (
-                      <div className="text-xs text-white/30">This part is not listed on {name}</div>
-                    ) : (
-                      <div className="space-y-2.5">
-                        <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-1.5 h-1.5 rounded-full animate-pulse bg-indigo-400" />
-                            <span className="text-xs text-indigo-300/80 font-mono font-medium">Tinyfish agent running...</span>
-                          </div>
-                          {["Navigating supplier portal...", "Locating part number...", "Extracting live pricing..."].map((line, li) => (
-                            <div key={li} className="flex items-center gap-2 mt-1">
-                              <div className="w-1 h-1 rounded-full bg-white/15 shrink-0" />
-                              <span className="text-xs text-white/25 font-mono">{line}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="h-3 w-12 rounded animate-pulse" style={{ background: "rgba(255,255,255,0.06)" }} />
-                          <div className="h-7 w-20 rounded animate-pulse" style={{ background: "rgba(255,255,255,0.06)" }} />
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="h-3 w-16 rounded animate-pulse" style={{ background: "rgba(255,255,255,0.05)" }} />
-                          <div className="h-5 w-24 rounded animate-pulse" style={{ background: "rgba(255,255,255,0.05)" }} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
+            {/* Supplier grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {displaySuppliers.map(({ name, tier }) => {
+                const supplierResult = found.find(s => s.supplier === name);
+                const isNotFound = notFound.includes(name);
+                const isLoading = !supplierResult && !isNotFound && phase === "searching";
+                if (supplierResult) return <SupplierCard key={name} supplier={supplierResult} />;
+                if (isNotFound) return <SupplierCard key={name} notFound name={name} tier={tier} />;
+                return <SupplierCard key={name} loading={isLoading} name={name} tier={tier} />;
               })}
             </div>
 
-            {/* PDF button — only when done */}
-            {recommendation && (
-              <>
-                <button onClick={handlePDFClick} className="w-full flex items-center justify-center gap-2.5 active:scale-[0.99] text-white font-semibold py-3.5 rounded-xl transition-all hover:opacity-90 animate-fade-in"
-                  style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)", boxShadow: "0 4px 20px rgba(99,102,241,0.3)" }}>
-                  {user ? <Download size={16} /> : <Lock size={16} />}
-                  {user ? "Generate Purchase Order (PDF)" : "Sign in to Generate Purchase Order"}
-                </button>
-                <button onClick={reset} className="w-full text-center text-sm text-white/25 hover:text-white/50 transition-colors py-1">Search a different part</button>
-              </>
+            {phase === "error" && (
+              <div className="rounded-2xl px-5 py-5 flex items-start gap-4"
+                style={{ background:"rgba(248,113,113,0.06)", border:"1px solid rgba(248,113,113,0.2)" }}>
+                <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-white/80 font-semibold text-sm mb-1">Search failed</div>
+                  <div className="text-white/40 text-sm">Check your connection and try again.</div>
+                </div>
+              </div>
             )}
+
+            {phase === "done" && found.length === 0 && (
+              <div className="rounded-2xl px-5 py-5 flex items-start gap-4"
+                style={{ background:"rgba(248,113,113,0.06)", border:"1px solid rgba(248,113,113,0.2)" }}>
+                <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-white/80 font-semibold text-sm mb-1">No results found for {currentMpn}</div>
+                  <div className="text-white/40 text-sm">Verify the MPN and try again. Some parts may not be listed on these platforms.</div>
+                </div>
+              </div>
+            )}
+
+            {phase === "done" && found.length > 0 && (
+              <button onClick={handlePDFClick}
+                className="w-full flex items-center justify-center gap-2.5 text-white font-semibold py-3.5 rounded-xl animate-fade-in transition-opacity hover:opacity-90"
+                style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)", boxShadow:"0 4px 20px rgba(99,102,241,0.3)" }}>
+                {user ? <Download size={16} /> : <Lock size={16} />}
+                {user ? "Generate Purchase Order (PDF)" : "Sign in to Generate Purchase Order"}
+              </button>
+            )}
+
+            <button onClick={reset} className="w-full text-center text-sm text-white/20 hover:text-white/40 py-2 transition-colors">
+              ← Search a different part
+            </button>
           </div>
         )}
 
-        {/* Not found + aliases */}
-        {notFound && (
-          <div className="w-full max-w-2xl mt-6 space-y-4 animate-fade-in">
-            <div className="rounded-2xl px-5 py-5 flex items-start gap-4" style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.2)" }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}><AlertCircle size={16} className="text-red-400" /></div>
-              <div>
-                <div className="text-white/80 font-semibold text-sm mb-1">Part Not Found</div>
-                <div className="text-white/40 text-sm leading-relaxed">&quot;{partNumber}&quot; was not found on Mouser, DigiKey or LCSC. This may be a marketing name rather than a distributor MPN.</div>
-                <button onClick={reset} className="mt-3 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors">Try another MPN →</button>
-              </div>
-            </div>
-
-            {aliases.length > 0 && (
-              <div className="rounded-2xl px-5 py-5" style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "rgba(99,102,241,0.2)" }}><Search size={13} className="text-indigo-400" /></div>
+        {/* ── IDLE ── */}
+        {!hasResults && (
+          <div className="mt-2 w-full max-w-4xl space-y-6 animate-fade-in">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-2xl p-6" style={{ background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.2)" }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
+                    <Cpu size={18} className="text-white" />
+                  </div>
                   <div>
-                    <div className="text-sm font-bold text-white/80">Did you mean one of these?</div>
-                    <div className="text-xs text-white/30">Claude identified these distributor SKUs for your search</div>
+                    <div className="font-bold text-white/90 text-sm">Standard Distributors</div>
+                    <div className="text-xs text-indigo-400">LCSC</div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  {aliases.map((alias, i) => (
-                    <button key={i} onClick={() => { reset(); setTimeout(() => runSequence({ part: alias.mpn, desc: alias.description }), 100); }}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group hover:scale-[1.01]"
-                      style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}><Package size={16} className="text-white" /></div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-mono font-bold text-sm text-white/90">{alias.mpn}</div>
-                        <div className="text-xs text-white/40 mt-0.5 truncate">{alias.description}</div>
-                      </div>
-                      <ChevronRight size={16} className="text-indigo-400/50 shrink-0" />
-                    </button>
-                  ))}
+                <div className="text-xs text-white/40 leading-relaxed">
+                  Authorized distributors with verified stock, structured pricing, and reliable lead times. Best for production orders.
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Idle */}
-        {phase === "idle" && (
-          <div className="mt-16 w-full max-w-2xl space-y-10 animate-fade-in">
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { icon: Zap, label: "Autonomous Agents", sub: "Tinyfish agents browse Mouser, DigiKey & LCSC — cards appear as each responds" },
-                { icon: Star, label: "Claude AI Analysis", sub: "Claude compares price, stock & lead times and picks the winner" },
-                { icon: Download, label: "Instant PO Generation", sub: "One-click professional PDF purchase orders, ready to send" },
-              ].map(({ icon: Icon, label, sub }, i) => (
-                <div key={i} className="rounded-2xl p-6 text-center transition-all cursor-default hover:scale-[1.02]" style={glass}>
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center mx-auto mb-4" style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.2)" }}><Icon size={20} className="text-indigo-400" /></div>
-                  <div className="text-sm font-bold mb-2 text-white/80">{label}</div>
-                  <div className="text-xs leading-relaxed text-white/35">{sub}</div>
+              <div className="rounded-2xl p-6" style={{ background:"rgba(249,115,22,0.06)", border:"1px solid rgba(249,115,22,0.2)" }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ background:"linear-gradient(135deg,#c2410c,#ea580c)" }}>
+                    <ShoppingCart size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white/90 text-sm">Chinese Platforms</div>
+                    <div className="text-xs text-orange-400">Alibaba · UTSource</div>
+                  </div>
                 </div>
-              ))}
+                <div className="text-xs text-white/40 leading-relaxed">
+                  Competitive pricing for samples and bulk. Alibaba for large orders, UTSource for authorized IC sourcing direct from China.
+                </div>
+              </div>
             </div>
+
+            <div className="rounded-xl px-4 py-3 flex items-center gap-3"
+              style={{ background:"rgba(52,211,153,0.06)", border:"1px solid rgba(52,211,153,0.15)" }}>
+              <Zap size={14} className="text-emerald-400 shrink-0" />
+              <p className="text-xs text-white/40">
+                <span className="text-emerald-400 font-semibold">TinyFish Search + Fetch</span>
+                {" "}— all 3 suppliers searched in parallel using open product pages. Results in ~15s.
+                Cached results return <span className="text-white/70 font-semibold">instantly.</span>
+              </p>
+            </div>
+
             <div>
               <p className="text-xs font-semibold text-white/25 uppercase tracking-wider mb-3">Try these parts</p>
               <div className="flex flex-wrap gap-2">
                 {FALLBACK_CATALOG.map((item, i) => (
-                  <button key={i} onClick={() => runSequence(item)} className="text-white/50 text-xs font-mono font-medium px-3 py-1.5 rounded-lg transition-all hover:text-white/80"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  <button key={i} onClick={() => runSearch(item.part)}
+                    className="text-white/50 text-xs font-mono font-medium px-3 py-1.5 rounded-lg hover:text-white/80 transition-all"
+                    style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)" }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(99,102,241,0.4)")}
                     onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}>
                     {item.part}
@@ -898,29 +1053,45 @@ export default function OmniProcure() {
         )}
       </main>
 
-      {/* Settings */}
+      {/* Settings panel */}
       {settingsOpen && (
         <>
-          <div className="fixed inset-0 z-40" style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} onClick={() => setSettingsOpen(false)} />
-          <div className="fixed top-0 right-0 h-full w-80 z-50 flex flex-col shadow-2xl" style={{ background: "rgba(8,5,25,0.98)", borderLeft: "1px solid rgba(99,102,241,0.15)" }}>
-            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              <div className="flex items-center gap-2"><Settings size={15} className="text-indigo-400" /><span className="font-bold text-sm text-white/80">Enterprise Settings</span></div>
-              <button onClick={() => setSettingsOpen(false)} className="text-white/30 hover:text-white/60 transition-colors"><X size={16} /></button>
+          <div className="fixed inset-0 z-40 transition-opacity"
+            style={{ background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
+            onClick={() => setSettingsOpen(false)} />
+          <div className="fixed top-0 right-0 h-full w-80 z-50 flex flex-col shadow-2xl"
+            style={{ background:"rgba(8,5,25,0.98)", borderLeft:"1px solid rgba(99,102,241,0.15)" }}>
+            <div className="flex items-center justify-between px-5 py-4"
+              style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+              <div className="flex items-center gap-2">
+                <Settings size={15} className="text-indigo-400" />
+                <span className="font-bold text-sm text-white/80">Enterprise Settings</span>
+              </div>
+              <button onClick={() => setSettingsOpen(false)} className="text-white/30 hover:text-white/60 transition-colors">
+                <X size={16} />
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <p className="text-xs font-semibold text-white/25 uppercase tracking-wider mb-4">Integrations</p>
               {SETTINGS_TOGGLES.map((t, i) => (
-                <div key={i} className="flex items-center justify-between py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div key={i} className="flex items-center justify-between py-3.5"
+                  style={{ borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}><t.icon size={13} className="text-white/40" /></div>
-                    <div><div className="text-sm font-semibold text-white/70">{t.label}</div><div className="text-xs text-white/30">{t.sub}</div></div>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                      style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)" }}>
+                      <t.icon size={13} className="text-white/40" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-white/70">{t.label}</div>
+                      <div className="text-xs text-white/30">{t.sub}</div>
+                    </div>
                   </div>
                   <Toggle enabled={t.enabled} />
                 </div>
               ))}
             </div>
-            <div className="px-5 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              <p className="text-xs text-white/20 text-center">OmniProcure Enterprise v1.0.0</p>
+            <div className="px-5 py-4" style={{ borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+              <p className="text-xs text-white/20 text-center">OmniProcure v3.0.0 · TinyFish S+F</p>
             </div>
           </div>
         </>
@@ -929,12 +1100,10 @@ export default function OmniProcure() {
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
       <style jsx global>{`
-        @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-        @keyframes progress { 0% { width: 5%; } 50% { width: 70%; } 90% { width: 90%; } 100% { width: 95%; } }
-        .animate-fade-in { animation: fade-in 0.4s ease forwards; }
-        .animate-slide-up { animation: slide-up 0.3s ease forwards; }
-        .animate-progress { animation: progress 180s ease-out forwards; }
+        @keyframes fade-in  { from { opacity:0; transform:translateY(6px);  } to { opacity:1; transform:none; } }
+        @keyframes slide-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
+        .animate-fade-in  { animation: fade-in  0.35s ease forwards; }
+        .animate-slide-up { animation: slide-up 0.3s  ease forwards; }
       `}</style>
     </div>
   );
