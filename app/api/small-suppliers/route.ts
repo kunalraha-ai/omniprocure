@@ -20,7 +20,7 @@ interface SupplierResult {
   leadTime: string;
   url: string;
   moq: number;
-  recommended?: boolean;
+  reason: string;
 }
 
 interface ClaudeRanking {
@@ -55,14 +55,14 @@ const SUPPLIERS: Array<{
     tier: "standard",
     searchQuery: (mpn) => `${mpn} site:lcsc.com/product-detail`,
     urlMustContain: "lcsc.com/product-detail",
-    fetchTimeoutMs: 20000,
+    fetchTimeoutMs: 295000,
   },
   {
     name: "UTSource",
     tier: "chinese",
     searchQuery: (mpn) => `${mpn} site:utsource.net/itm/p`,
     urlMustContain: "utsource.net/itm/p",
-    fetchTimeoutMs: 45000,
+    fetchTimeoutMs: 295000,
     contentSliceStart: 8000,
   },
   {
@@ -70,7 +70,7 @@ const SUPPLIERS: Array<{
     tier: "chinese",
     searchQuery: (mpn) => `"${mpn}" electronic component site:alibaba.com/product-detail`,
     urlMustContain: "alibaba.com/product-detail",
-    fetchTimeoutMs: 45000,
+    fetchTimeoutMs: 295000,
   },
 ];
 
@@ -191,8 +191,8 @@ async function parseWithClaude(
               `- If lead time not shown: use "In stock" when stock > 0, else "Contact supplier"\n` +
               `- If stock not shown but item is listed as available: use stock: 999\n\n` +
               `Respond ONLY with raw JSON (no markdown fences):\n` +
-              `{"found":true,"price":<number>,"currency":"<ISO code>","stock":<integer>,"moq":<integer>,"leadTime":"<string>"}\n` +
-              `If not clearly this product or no price at all: {"found":false}`,
+              `{"found":true,"price":<number>,"currency":"<ISO code>","stock":<integer>,"moq":<integer>,"leadTime":"<string>","reason":"<brief explanation>"}\n` +
+              `If not clearly this product or no price at all: {"found":false,"reason":"<why rejected>"}`,
           },
         ],
       }),
@@ -210,8 +210,36 @@ async function parseWithClaude(
     const match = text.match(/\{[\s\S]*?\}/);
     if (!match) { console.log(`[Claude:${supplierName}] ❌ No JSON`); return null; }
     const parsed = JSON.parse(match[0]);
-    if (!parsed.found) { console.log(`[Claude:${supplierName}] found=false`); return null; }
-    if (!parsed.price || parsed.price <= 0) { console.log(`[Claude:${supplierName}] ❌ Invalid price`); return null; }
+    if (!parsed.found) { 
+      console.log(`[Claude:${supplierName}] found=false: ${parsed.reason}`);
+      return {
+        supplier: supplierName,
+        tier,
+        mpn,
+        price: null,
+        currency: "USD",
+        stock: 0,
+        leadTime: "N/A",
+        url,
+        moq: 1,
+        reason: parsed.reason ?? "Product not found or not matching criteria",
+      };
+    }
+    if (!parsed.price || parsed.price <= 0) { 
+      console.log(`[Claude:${supplierName}] ❌ Invalid price`);
+      return {
+        supplier: supplierName,
+        tier,
+        mpn,
+        price: null,
+        currency: "USD",
+        stock: 0,
+        leadTime: "N/A",
+        url,
+        moq: 1,
+        reason: "Invalid or missing price information",
+      };
+    }
 
     return {
       supplier: supplierName,
@@ -223,6 +251,7 @@ async function parseWithClaude(
       leadTime: parsed.leadTime ?? "Contact supplier",
       url,
       moq: parseInt(String(parsed.moq ?? "1")) || 1,
+      reason: parsed.reason ?? "Product found with valid pricing",
     };
   } catch (err: any) {
     console.log(`[Claude:${supplierName}] ❌ ${err?.message}`);
@@ -393,13 +422,26 @@ export async function POST(req: NextRequest) {
         if (cached) {
           send("started", { message: "Cache hit — serving instantly", cached: true, totalSuppliers: SUPPLIERS.length });
           const results: SupplierResult[] = cached.results ?? [];
-          for (const r of results) {
-            send("supplier_found", { supplier: r });
-            await new Promise((r) => setTimeout(r, 60));
-          }
-          const foundNames = new Set(results.map((r) => r.supplier));
           for (const s of SUPPLIERS) {
-            if (!foundNames.has(s.name)) send("supplier_not_found", { name: s.name, tier: s.tier });
+            const r = results.find((res) => res.supplier === s.name);
+            if (r) {
+              send("supplier_found", { supplier: r });
+            } else {
+              // Not found in cache, send with default reason
+              send("supplier_found", { supplier: {
+                supplier: s.name,
+                tier: s.tier,
+                mpn,
+                price: null,
+                currency: "USD",
+                stock: 0,
+                leadTime: "N/A",
+                url: "",
+                moq: 1,
+                reason: "Not found in cached search results",
+              } });
+            }
+            await new Promise((resolve) => setTimeout(resolve, 60));
           }
           send("complete", {
             mpn,
@@ -460,17 +502,33 @@ export async function POST(req: NextRequest) {
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
               if (result) {
-                found.push(result);
+                if (result.price != null) {
+                  found.push(result);
+                  console.log(`[${supplier.name}] ✅ ${result.currency} ${result.price}, stock:${result.stock} (${elapsed}s)`);
+                } else {
+                  console.log(`[${supplier.name}] ❌ Not found (${elapsed}s): ${result.reason}`);
+                }
                 send("supplier_found", { supplier: result });
-                console.log(`[${supplier.name}] ✅ ${result.currency} ${result.price}, stock:${result.stock} (${elapsed}s)`);
               } else {
                 send("supplier_not_found", { name: supplier.name, tier: supplier.tier });
-                console.log(`[${supplier.name}] ❌ Not found (${elapsed}s)`);
+                console.log(`[${supplier.name}] ❌ Parse failed (${elapsed}s)`);
               }
             } catch (err: any) {
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               console.log(`[${supplier.name}] ❌ Exception (${elapsed}s): ${err?.message}`);
-              send("supplier_not_found", { name: supplier.name, tier: supplier.tier });
+              // Send as not found with reason
+              send("supplier_found", { supplier: {
+                supplier: supplier.name,
+                tier: supplier.tier,
+                mpn,
+                price: null,
+                currency: "USD",
+                stock: 0,
+                leadTime: "N/A",
+                url: "",
+                moq: 1,
+                reason: `Failed to search: ${err?.message ?? "Unknown error"}`,
+              } });
             }
           })
         );
@@ -481,14 +539,11 @@ export async function POST(req: NextRequest) {
 
         // ── 4. Rank ───────────────────────────────────────────────────────
         let recommendation: ClaudeRanking | null = null;
-        if (found.length > 1) {
-          recommendation = await rankWithClaude(mpn, found);
-          if (recommendation && found[recommendation.recommendedIndex]) {
-            found[recommendation.recommendedIndex].recommended = true;
-          }
-        } else if (found.length === 1) {
-          found[0].recommended = true;
-          console.log(`[Rank] Single — auto: ${found[0].supplier}`);
+        const foundWithPrice = found.filter(s => s.price != null);
+        if (foundWithPrice.length > 1) {
+          recommendation = await rankWithClaude(mpn, foundWithPrice);
+        } else if (foundWithPrice.length === 1) {
+          console.log(`[Rank] Single — auto: ${foundWithPrice[0].supplier}`);
         }
 
         // ── 5. Cache + complete ───────────────────────────────────────────

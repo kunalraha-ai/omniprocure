@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
-import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import {
   Search, Settings, X, CheckCircle, Package, Clock,
   Download, Zap, Database, RefreshCw, ShieldCheck, Lock,
-  ChevronRight, Star, AlertCircle, Loader2, LogOut,
-  Mail, Eye, EyeOff, History, Trash2, RotateCcw,
+  ChevronRight, Star, AlertCircle, Loader2,
+  History, Trash2, RotateCcw,
   ExternalLink, Cpu, ShoppingCart,
 } from "lucide-react";
 
@@ -25,7 +24,7 @@ interface SupplierResult {
   leadTime: string;
   url: string;
   moq: number;
-  recommended?: boolean;
+  reason: string;
 }
 
 interface ClaudeRanking {
@@ -158,13 +157,13 @@ function StockBadge({ stock }: { stock: number }) {
 
 // ── SupplierCard ──────────────────────────────────────────────────────────────
 function SupplierCard({
-  supplier, loading = false, notFound = false, name, tier,
+  supplier, loading = false, name, tier, isRecommended = false,
 }: {
   supplier?: SupplierResult;
   name?: string;
   tier?: "standard" | "chinese";
   loading?: boolean;
-  notFound?: boolean;
+  isRecommended?: boolean;
 }) {
   const displayName = supplier?.supplier ?? name ?? "Supplier";
   const cardTier = supplier?.tier ?? tier ?? "standard";
@@ -192,19 +191,6 @@ function SupplierCard({
       </div>
     </div>
   );
-
-  if (notFound || !supplier) return (
-    <div className="rounded-2xl p-4 animate-fade-in"
-      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-      <div className="flex items-center justify-between">
-        <div className="font-semibold text-white/35 text-sm">{displayName}</div>
-        <span className="text-xs text-white/20 px-2 py-0.5 rounded-full"
-          style={{ border: "1px solid rgba(255,255,255,0.07)" }}>Not listed</span>
-      </div>
-    </div>
-  );
-
-  const isRecommended = supplier.recommended;
 
   return (
     <div className="relative rounded-2xl p-5 animate-fade-in transition-all"
@@ -239,7 +225,7 @@ function SupplierCard({
               <div className="text-white/30 text-xs">per unit · MOQ {supplier.moq}</div>
             </>
           ) : (
-            <div className="text-sm text-white/40">Contact for price</div>
+            <div className="text-sm text-white/40">Not listed</div>
           )}
         </div>
       </div>
@@ -255,6 +241,13 @@ function SupplierCard({
         </div>
       </div>
 
+      <div className="mb-4">
+        <div className="text-xs font-semibold text-white/60 mb-2">Reasoning</div>
+        <div className="text-xs text-white/50 leading-relaxed bg-white/5 rounded-lg p-3 border border-white/10">
+          {supplier.reason}
+        </div>
+      </div>
+
       <a href={supplier.url} target="_blank" rel="noopener noreferrer"
         className="flex items-center gap-1.5 group transition-colors pt-3"
         style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
@@ -265,146 +258,8 @@ function SupplierCard({
   );
 }
 
-// ── AuthModal ─────────────────────────────────────────────────────────────────
-function AuthModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  const handleEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supabase) return;
-    setLoading(true); setError("");
-    try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setError("Check your email to confirm your account.");
-        setLoading(false); return;
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
-      onSuccess(); onClose();
-    } catch (err: any) {
-      setError(err.message ?? "Something went wrong");
-    } finally { setLoading(false); }
-  };
-
-  const handleGoogle = async () => {
-    if (!supabase) return;
-    setGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) { setError(error.message); setGoogleLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(3,7,18,0.75)" }} onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-fade-in"
-        style={{ background: "rgba(15,10,40,0.98)", border: "1px solid rgba(99,102,241,0.25)" }}>
-        <div className="h-1 w-full" style={{ background: "linear-gradient(90deg,#818cf8,#6366f1,#60a5fa)" }} />
-        <div className="px-8 pt-8 pb-8">
-          <button onClick={onClose} className="absolute top-5 right-5 text-white/40 hover:text-white/70 transition-colors"><X size={18} /></button>
-          <div className="mb-7 text-center">
-            <div className="flex justify-center mb-4"><AtomLogo size={48} /></div>
-            <h2 className="text-xl font-bold text-white mb-1">
-              {mode === "signin" ? "Welcome back" : "Join OmniProcure"}
-            </h2>
-            <p className="text-sm text-white/50">
-              {mode === "signin" ? "Sign in for 50 searches/day + PO generation" : "Start sourcing smarter"}
-            </p>
-          </div>
-
-          <button onClick={handleGoogle} disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 text-sm font-semibold text-white mb-4 disabled:opacity-60 transition-opacity"
-            style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}>
-            {googleLoading ? <Loader2 size={16} className="animate-spin" /> : (
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-              </svg>
-            )}
-            Continue with Google
-          </button>
-
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-            <span className="text-xs text-white/30">or</span>
-            <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-          </div>
-
-          <form onSubmit={handleEmail} className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-white/50 mb-1.5 block">Email</label>
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                <Mail size={14} className="text-white/30 shrink-0" />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="you@company.com" required
-                  className="flex-1 text-sm text-white placeholder-white/20 outline-none bg-transparent" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-white/50 mb-1.5 block">Password</label>
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                <Lock size={14} className="text-white/30 shrink-0" />
-                <input type={showPassword ? "text" : "password"} value={password}
-                  onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
-                  className="flex-1 text-sm text-white placeholder-white/20 outline-none bg-transparent" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-white/30 hover:text-white/60">
-                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-            {error && (
-              <div className={`text-xs px-3 py-2 rounded-lg ${error.includes("Check")
-                ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20"
-                : "text-red-400 bg-red-400/10 border border-red-400/20"}`}>
-                {error}
-              </div>
-            )}
-            <button type="submit" disabled={loading}
-              className="w-full py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-              {loading && <Loader2 size={15} className="animate-spin" />}
-              {mode === "signin" ? "Sign in" : "Create account"}
-            </button>
-          </form>
-
-          <div className="mt-4 text-center">
-            <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
-              className="text-xs text-white/40 hover:text-white/60">
-              {mode === "signin" ? "No account? " : "Have an account? "}
-              <span className="text-indigo-400 font-semibold">{mode === "signin" ? "Sign up" : "Sign in"}</span>
-            </button>
-          </div>
-          <div className="mt-5 pt-5 text-center" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <button onClick={onClose} className="text-xs text-white/25 hover:text-white/40">
-              Continue as guest (5 searches/day)
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function OmniProcure() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [query, setQuery] = useState("");
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [suggestions, setSuggestions] = useState<CatalogItem[]>([]);
@@ -419,35 +274,22 @@ export default function OmniProcure() {
   const [phase, setPhase] = useState<SearchPhase>("idle");
   const [searching, setSearching] = useState<Array<{ name: string; tier: "standard" | "chinese" }>>([]);
   const [found, setFound] = useState<SupplierResult[]>([]);
-  const [notFound, setNotFound] = useState<string[]>([]);
   const [recommendation, setRecommendation] = useState<ClaudeRanking | null>(null);
   const [cached, setCached] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [currentMpn, setCurrentMpn] = useState("");
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!supabase) { setAuthLoading(false); return; }
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) =>
-      setUser(session?.user ?? null)
-    );
-    return () => subscription.unsubscribe();
-  }, []);
-
   // ── History ───────────────────────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
-    if (!supabase || !user) { setSearchHistory([]); return; }
+    if (!supabase) { setSearchHistory([]); return; }
     try {
+      // Load history without user filter - show all recent searches
       const { data } = await supabase
         .from("search_history").select("id, part_number, searched_at")
-        .eq("user_id", user.id).order("searched_at", { ascending: false }).limit(20);
+        .order("searched_at", { ascending: false }).limit(20);
       setSearchHistory((data as HistoryItem[]) ?? []);
     } catch { setSearchHistory([]); }
-  }, [user]);
+  }, []);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
@@ -479,15 +321,14 @@ export default function OmniProcure() {
     setSuggestions(catalog.filter(c => c.part.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)).slice(0, 6));
   }, [query, catalog, selectedPart]);
 
-  const handleSignOut = async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut(); setUser(null); setToast("Signed out");
-  };
-
   const clearHistory = useCallback(async () => {
-    if (!supabase || !user) return;
-    try { await (supabase as any).from("search_history").delete().eq("user_id", user.id); setSearchHistory([]); } catch {}
-  }, [user]);
+    if (!supabase) return;
+    try {
+      // Clear all history since no user authentication
+      await (supabase as any).from("search_history").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      setSearchHistory([]);
+    } catch {}
+  }, []);
 
   const deleteHistoryItem = useCallback(async (id: string) => {
     if (!supabase) return;
@@ -507,14 +348,14 @@ export default function OmniProcure() {
     setPhase("searching");
     setSearching([]);
     setFound([]);
-    setNotFound([]);
     setRecommendation(null);
     setCached(false);
     setCachedAt(null);
 
-    if (supabase && user) {
+    if (supabase) {
       try {
-        await (supabase as any).from("search_history").insert({ user_id: user.id, part_number: clean });
+        // Insert search history without user association
+        await (supabase as any).from("search_history").insert({ part_number: clean });
         loadHistory();
       } catch {}
     }
@@ -523,7 +364,7 @@ export default function OmniProcure() {
       const res = await fetch("/api/small-suppliers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mpn: clean, userId: user?.id ?? null }),
+        body: JSON.stringify({ mpn: clean, userId: null }),
       });
       if (!res.ok) { setPhase("error"); return; }
 
@@ -550,19 +391,10 @@ export default function OmniProcure() {
             if (ev.type === "supplier_found") {
               setFound(prev => [...prev, ev.supplier]);
             }
-            if (ev.type === "supplier_not_found") {
-              setNotFound(prev => [...prev, ev.name]);
-            }
             if (ev.type === "complete") {
               setRecommendation(ev.recommendation ?? null);
               setCached(ev.cached ?? false);
               setCachedAt(ev.cachedAt ?? null);
-              if (ev.recommendation && ev.suppliers) {
-                const rec = ev.recommendation as ClaudeRanking;
-                setFound((ev.suppliers as SupplierResult[]).map((s, i) => ({
-                  ...s, recommended: i === rec.recommendedIndex,
-                })));
-              }
               setPhase("done");
             }
             if (ev.type === "error") setPhase("error");
@@ -571,7 +403,7 @@ export default function OmniProcure() {
       }
       setPhase("done");
     } catch { setPhase("error"); }
-  }, [user, loadHistory]);
+  }, [loadHistory]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim() && !selectedPart) runSearch(query.trim());
@@ -580,14 +412,15 @@ export default function OmniProcure() {
   const reset = () => {
     setQuery(""); setSelectedPart(null); setCurrentMpn("");
     setPhase("idle");
-    setSearching([]); setFound([]); setNotFound([]);
+    setSearching([]); setFound([]);
     setRecommendation(null); setCached(false); setCachedAt(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   // ── PDF ───────────────────────────────────────────────────────────────────
   const generatePDF = useCallback(async () => {
-    const winner = found.find(s => s.recommended) ?? found[0];
+    const foundWithPrice = found.filter(s => s.price != null);
+    const winner = recommendation && foundWithPrice[recommendation.recommendedIndex] ? foundWithPrice[recommendation.recommendedIndex] : foundWithPrice[0];
     if (!winner) return;
     const { default: jsPDF } = await import("jspdf");
     const { default: autoTable } = await import("jspdf-autotable");
@@ -646,12 +479,10 @@ export default function OmniProcure() {
   }, [found, currentMpn, recommendation]);
 
   const handlePDFClick = () => {
-    if (!user) { setShowAuthModal(true); return; }
     generatePDF();
   };
 
   const hasResults = phase !== "idle";
-  const userInitials = user?.email?.slice(0,2).toUpperCase() ?? "";
 
   // Use searching state if available, else fallback to SUPPLIER_NAMES
   const displaySuppliers = searching.length > 0 ? searching : SUPPLIER_NAMES;
@@ -668,7 +499,7 @@ export default function OmniProcure() {
           style={{ background:"radial-gradient(circle,#1d4ed8 0%,transparent 70%)", filter:"blur(100px)" }} />
       </div>
 
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} onSuccess={() => setToast("Signed in!")} />}
+
 
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-40 h-16 flex items-center justify-between px-6"
@@ -702,30 +533,6 @@ export default function OmniProcure() {
             </div>
           )}
 
-          {authLoading ? (
-            <Loader2 size={15} className="animate-spin text-white/40" />
-          ) : user ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
-                style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)" }}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                  style={{ background:"linear-gradient(135deg,#6366f1,#4f46e5)" }}>{userInitials}</div>
-                <span className="text-xs text-white/60 max-w-[120px] truncate">{user.email}</span>
-              </div>
-              <button onClick={handleSignOut}
-                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-500/10 transition-colors"
-                style={{ border:"1px solid rgba(255,255,255,0.08)" }}>
-                <LogOut size={13} className="text-white/40" />
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => setShowAuthModal(true)}
-              className="text-xs font-semibold text-white px-4 py-2 rounded-xl transition-opacity hover:opacity-90"
-              style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-              Sign in
-            </button>
-          )}
-
           <button onClick={() => setSettingsOpen(true)}
             className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors"
             style={{ border:"1px solid rgba(255,255,255,0.08)" }}>
@@ -750,13 +557,6 @@ export default function OmniProcure() {
             <span className="text-orange-400 font-semibold">Alibaba</span>
             {" "}— searched in parallel. Claude AI picks the winner.
           </p>
-          {!user && !authLoading && (
-            <p className="text-xs text-white/25 mt-3">
-              Guest: 5 searches/day.{" "}
-              <button onClick={() => setShowAuthModal(true)} className="text-indigo-400 underline">Sign in</button>
-              {" "}for 50/day + PO generation.
-            </p>
-          )}
         </div>
 
         {/* Search box */}
@@ -782,7 +582,7 @@ export default function OmniProcure() {
                 Search
               </button>
             ) : null}
-            {user && !selectedPart && (
+            {!selectedPart && (
               <button onClick={() => setHistoryOpen(h => !h)}
                 className="ml-1 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors"
                 style={historyOpen
@@ -794,7 +594,7 @@ export default function OmniProcure() {
           </div>
 
           {/* History dropdown */}
-          {user && historyOpen && !selectedPart && (
+          {historyOpen && !selectedPart && (
             <div ref={historyRef}
               className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30 animate-fade-in"
               style={{ background:"rgba(10,8,30,0.97)", border:"1px solid rgba(99,102,241,0.2)", backdropFilter:"blur(20px)" }}>
@@ -944,11 +744,11 @@ export default function OmniProcure() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {displaySuppliers.map(({ name, tier }) => {
                 const supplierResult = found.find(s => s.supplier === name);
-                const isNotFound = notFound.includes(name);
-                const isLoading = !supplierResult && !isNotFound && phase === "searching";
-                if (supplierResult) return <SupplierCard key={name} supplier={supplierResult} />;
-                if (isNotFound) return <SupplierCard key={name} notFound name={name} tier={tier} />;
-                return <SupplierCard key={name} loading={isLoading} name={name} tier={tier} />;
+                const isLoading = !supplierResult && phase === "searching";
+                const foundWithPrice = found.filter(s => s.price != null);
+                const supplierIndex = foundWithPrice.findIndex(s => s.supplier === name);
+                const isRecommended = recommendation && supplierIndex >= 0 ? supplierIndex === recommendation.recommendedIndex : false;
+                return <SupplierCard key={name} supplier={supplierResult} loading={isLoading} name={name} tier={tier} isRecommended={isRecommended} />;
               })}
             </div>
 
@@ -978,8 +778,8 @@ export default function OmniProcure() {
               <button onClick={handlePDFClick}
                 className="w-full flex items-center justify-center gap-2.5 text-white font-semibold py-3.5 rounded-xl animate-fade-in transition-opacity hover:opacity-90"
                 style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)", boxShadow:"0 4px 20px rgba(99,102,241,0.3)" }}>
-                {user ? <Download size={16} /> : <Lock size={16} />}
-                {user ? "Generate Purchase Order (PDF)" : "Sign in to Generate Purchase Order"}
+                <Download size={16} />
+                Generate Purchase Order (PDF)
               </button>
             )}
 
@@ -1099,12 +899,6 @@ export default function OmniProcure() {
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
-      <style jsx global>{`
-        @keyframes fade-in  { from { opacity:0; transform:translateY(6px);  } to { opacity:1; transform:none; } }
-        @keyframes slide-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
-        .animate-fade-in  { animation: fade-in  0.35s ease forwards; }
-        .animate-slide-up { animation: slide-up 0.3s  ease forwards; }
-      `}</style>
     </div>
   );
 }
