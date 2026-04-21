@@ -487,7 +487,25 @@ export async function POST(req: NextRequest) {
               const rawText = await fetchPage(supplier.name, productUrl, supplier.fetchTimeoutMs);
               if (!rawText) {
                 console.log(`[${supplier.name}] ❌ Empty fetch`);
-                send("supplier_not_found", { name: supplier.name, tier: supplier.tier });
+                if (supplier.name === "Alibaba") {
+                  // Special handling for Alibaba bot protection
+                  const alibabaResult: SupplierResult = {
+                    supplier: supplier.name,
+                    tier: supplier.tier,
+                    mpn,
+                    price: null,
+                    currency: "USD",
+                    stock: 0,
+                    leadTime: "N/A",
+                    url: `https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(mpn)}`,
+                    moq: 1,
+                    reason: "Alibaba's page could not be fetched due to bot protection. Visit directly to check pricing.",
+                  };
+                  send("supplier_found", { supplier: alibabaResult });
+                  console.log(`[${supplier.name}] ⚠️ Bot protected - providing search link`);
+                } else {
+                  send("supplier_not_found", { name: supplier.name, tier: supplier.tier });
+                }
                 return;
               }
 
