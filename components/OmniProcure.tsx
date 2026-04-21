@@ -7,7 +7,6 @@ import {
   Search, Settings, X, CheckCircle, Package, Clock,
   Download, Zap, Database, RefreshCw, ShieldCheck, Lock,
   ChevronRight, Star, AlertCircle, Loader2,
-  History, Trash2, RotateCcw,
   ExternalLink, Cpu, ShoppingCart,
 } from "lucide-react";
 
@@ -32,8 +31,6 @@ interface ClaudeRanking {
   reason: string;
   recommendedIndex: number;
 }
-
-interface HistoryItem { id: string; part_number: string; searched_at: string; }
 
 type SearchPhase = "idle" | "searching" | "done" | "error";
 
@@ -192,6 +189,8 @@ function SupplierCard({
     </div>
   );
 
+  if (!supplier) return null;
+
   return (
     <div className="relative rounded-2xl p-5 animate-fade-in transition-all"
       style={isRecommended
@@ -267,9 +266,6 @@ export default function OmniProcure() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [searchHistory, setSearchHistory] = useState<HistoryItem[]>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const historyRef = useRef<HTMLDivElement>(null);
 
   const [phase, setPhase] = useState<SearchPhase>("idle");
   const [searching, setSearching] = useState<Array<{ name: string; tier: "standard" | "chinese" }>>([]);
@@ -278,28 +274,6 @@ export default function OmniProcure() {
   const [cached, setCached] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [currentMpn, setCurrentMpn] = useState("");
-
-  // ── History ───────────────────────────────────────────────────────────────
-  const loadHistory = useCallback(async () => {
-    if (!supabase) { setSearchHistory([]); return; }
-    try {
-      // Load history without user filter - show all recent searches
-      const { data } = await supabase
-        .from("search_history").select("id, part_number, searched_at")
-        .order("searched_at", { ascending: false }).limit(20);
-      setSearchHistory((data as HistoryItem[]) ?? []);
-    } catch { setSearchHistory([]); }
-  }, []);
-
-  useEffect(() => { loadHistory(); }, [loadHistory]);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (historyRef.current && !historyRef.current.contains(e.target as Node)) setHistoryOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
 
   // ── Catalog ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -321,23 +295,6 @@ export default function OmniProcure() {
     setSuggestions(catalog.filter(c => c.part.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)).slice(0, 6));
   }, [query, catalog, selectedPart]);
 
-  const clearHistory = useCallback(async () => {
-    if (!supabase) return;
-    try {
-      // Clear all history since no user authentication
-      await (supabase as any).from("search_history").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      setSearchHistory([]);
-    } catch {}
-  }, []);
-
-  const deleteHistoryItem = useCallback(async (id: string) => {
-    if (!supabase) return;
-    try {
-      await (supabase as any).from("search_history").delete().eq("id", id);
-      setSearchHistory(prev => prev.filter(h => h.id !== id));
-    } catch {}
-  }, []);
-
   // ── Main search ───────────────────────────────────────────────────────────
   const runSearch = useCallback(async (mpn: string) => {
     const clean = mpn.trim().toUpperCase();
@@ -351,14 +308,6 @@ export default function OmniProcure() {
     setRecommendation(null);
     setCached(false);
     setCachedAt(null);
-
-    if (supabase) {
-      try {
-        // Insert search history without user association
-        await (supabase as any).from("search_history").insert({ part_number: clean });
-        loadHistory();
-      } catch {}
-    }
 
     try {
       const res = await fetch("/api/small-suppliers", {
@@ -403,7 +352,7 @@ export default function OmniProcure() {
       }
       setPhase("done");
     } catch { setPhase("error"); }
-  }, [loadHistory]);
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim() && !selectedPart) runSearch(query.trim());
@@ -582,67 +531,7 @@ export default function OmniProcure() {
                 Search
               </button>
             ) : null}
-            {!selectedPart && (
-              <button onClick={() => setHistoryOpen(h => !h)}
-                className="ml-1 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors"
-                style={historyOpen
-                  ? { background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.4)" }
-                  : { border:"1px solid rgba(255,255,255,0.08)" }}>
-                <History size={14} className={historyOpen ? "text-indigo-400" : "text-white/30"} />
-              </button>
-            )}
           </div>
-
-          {/* History dropdown */}
-          {historyOpen && !selectedPart && (
-            <div ref={historyRef}
-              className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30 animate-fade-in"
-              style={{ background:"rgba(10,8,30,0.97)", border:"1px solid rgba(99,102,241,0.2)", backdropFilter:"blur(20px)" }}>
-              <div className="flex items-center justify-between px-4 py-3"
-                style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-                <div className="flex items-center gap-2">
-                  <History size={13} className="text-indigo-400" />
-                  <span className="text-xs font-bold text-white/70">Recent</span>
-                  <span className="text-xs text-white/25">({searchHistory.length})</span>
-                </div>
-                {searchHistory.length > 0 && (
-                  <button onClick={clearHistory} className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 font-medium">
-                    <Trash2 size={11} />Clear
-                  </button>
-                )}
-              </div>
-              {searchHistory.length === 0 ? (
-                <div className="px-4 py-5 text-center text-xs text-white/25">No searches yet</div>
-              ) : (
-                <div className="max-h-56 overflow-y-auto">
-                  {searchHistory.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 group cursor-pointer transition-colors"
-                      style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                      <button className="flex items-center gap-3 flex-1 text-left"
-                        onClick={() => { setHistoryOpen(false); runSearch(item.part_number); }}>
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.2)" }}>
-                          <RotateCcw size={12} className="text-indigo-400" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-mono font-semibold text-white/80">{item.part_number}</div>
-                          <div className="text-xs text-white/30">
-                            {new Date(item.searched_at).toLocaleDateString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" })}
-                          </div>
-                        </div>
-                      </button>
-                      <button onClick={() => deleteHistoryItem(item.id)}
-                        className="opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 transition-all">
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Suggestions dropdown */}
           {query.trim() && !selectedPart && suggestions.length > 0 && (
