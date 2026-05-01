@@ -4,10 +4,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import {
-  Search, Settings, X, CheckCircle, Package, Clock,
+  Search, Settings, X, CheckCircle, Package,
   Download, Zap, Database, RefreshCw, ShieldCheck, Lock,
   ChevronRight, Star, AlertCircle, Loader2,
-  ExternalLink, Cpu, ShoppingCart,
+  ExternalLink, Globe, ChevronUp, ChevronDown, ArrowUpDown,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -15,7 +15,6 @@ interface CatalogItem { part: string; desc: string; }
 
 interface SupplierResult {
   supplier: string;
-  tier: "standard" | "chinese";
   mpn: string;
   price: number | null;
   currency: string;
@@ -24,6 +23,8 @@ interface SupplierResult {
   url: string;
   moq: number;
   reason: string;
+  region: string;
+  hasPrice: boolean;
 }
 
 interface ClaudeRanking {
@@ -33,8 +34,10 @@ interface ClaudeRanking {
 }
 
 type SearchPhase = "idle" | "searching" | "done" | "error";
+type SortKey = "ai" | "price" | "stock" | "leadtime";
+type SortDir = "asc" | "desc";
 
-// ── Supabase singleton ────────────────────────────────────────────────────────
+// ── Supabase ──────────────────────────────────────────────────────────────────
 const getSupabase = (() => {
   let inst: ReturnType<typeof createClient> | null = null;
   return () => {
@@ -50,12 +53,6 @@ const getSupabase = (() => {
 const supabase = getSupabase();
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-// Must match SUPPLIERS array in small-suppliers/route.ts exactly
-const SUPPLIER_NAMES: Array<{ name: string; tier: "standard" | "chinese" }> = [
-  { name: "LCSC",     tier: "standard" },
-  { name: "UTSource", tier: "chinese"  },
-  { name: "Alibaba",  tier: "chinese"  },
-];
 const FALLBACK_CATALOG: CatalogItem[] = [
   { part: "STM32F103C8T6",      desc: "ARM Cortex-M3 Microcontroller" },
   { part: "NRF52840-QIAA-R",    desc: "Bluetooth 5.0 SoC" },
@@ -74,36 +71,14 @@ const SETTINGS_TOGGLES = [
   { label: "SOC 2 Audit Logging",      sub: "Immutable event trail",          icon: ShieldCheck, enabled: true  },
 ];
 
-const TIER_STYLE = {
-  standard: {
-    color: "#a5b4fc",
-    bg: "rgba(99,102,241,0.12)",
-    border: "rgba(99,102,241,0.3)",
-  },
-  chinese: {
-    color: "#fb923c",
-    bg: "rgba(249,115,22,0.10)",
-    border: "rgba(249,115,22,0.3)",
-  },
-};
-
 // ── Atom logo ─────────────────────────────────────────────────────────────────
-function AtomLogo({ size = 30 }: { size?: number }) {
+function AtomLogo({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#al1)" strokeWidth="3.5" fill="none"/>
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#al2)" strokeWidth="3.5" fill="none" transform="rotate(60 50 50)"/>
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="url(#al3)" strokeWidth="3.5" fill="none" transform="rotate(120 50 50)"/>
-      <circle cx="50" cy="50" r="9" fill="url(#alC)"/>
-      <circle cx="95" cy="50" r="4.5" fill="#60a5fa"/>
-      <circle cx="27.5" cy="25.5" r="4.5" fill="#818cf8"/>
-      <circle cx="27.5" cy="74.5" r="4.5" fill="#6366f1"/>
-      <defs>
-        <linearGradient id="al1" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stopColor="#818cf8"/><stop offset="1" stopColor="#60a5fa"/></linearGradient>
-        <linearGradient id="al2" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stopColor="#6366f1"/><stop offset="1" stopColor="#38bdf8"/></linearGradient>
-        <linearGradient id="al3" x1="5" y1="50" x2="95" y2="50" gradientUnits="userSpaceOnUse"><stop stopColor="#a78bfa"/><stop offset="1" stopColor="#60a5fa"/></linearGradient>
-        <radialGradient id="alC" cx="50%" cy="50%" r="50%"><stop stopColor="#60a5fa"/><stop offset="1" stopColor="#6366f1"/></radialGradient>
-      </defs>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="white" strokeWidth="4" fill="none"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="white" strokeWidth="4" fill="none" transform="rotate(60 50 50)" opacity="0.6"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="white" strokeWidth="4" fill="none" transform="rotate(120 50 50)" opacity="0.3"/>
+      <circle cx="50" cy="50" r="7" fill="white"/>
     </svg>
   );
 }
@@ -112,10 +87,10 @@ function AtomLogo({ size = 30 }: { size?: number }) {
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl animate-slide-up"
-      style={{ background: "rgba(30,27,75,0.97)", border: "1px solid rgba(99,102,241,0.3)", backdropFilter: "blur(12px)" }}>
-      <CheckCircle size={16} className="text-indigo-400" />
-      <span className="font-medium text-sm text-white">{message}</span>
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl"
+      style={{ background: "#000", border: "1px solid #333" }}>
+      <CheckCircle size={13} className="text-white shrink-0" />
+      <span className="text-xs font-mono text-white">{message}</span>
     </div>
   );
 }
@@ -124,8 +99,8 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 function Toggle({ enabled }: { enabled: boolean }) {
   return (
     <div className="relative w-9 h-5 rounded-full transition-colors duration-200"
-      style={{ background: enabled ? "rgba(99,102,241,0.8)" : "rgba(255,255,255,0.1)" }}>
-      <div className={`absolute top-0.5 w-4 h-4 rounded-full shadow-sm transition-transform duration-200 ${enabled ? "translate-x-4 bg-white" : "translate-x-0.5 bg-white/60"}`} />
+      style={{ background: enabled ? "#fff" : "#222" }}>
+      <div className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform duration-200 ${enabled ? "translate-x-4 bg-black" : "translate-x-0.5 bg-neutral-600"}`} />
     </div>
   );
 }
@@ -133,128 +108,31 @@ function Toggle({ enabled }: { enabled: boolean }) {
 // ── StockBadge ────────────────────────────────────────────────────────────────
 function StockBadge({ stock }: { stock: number }) {
   if (stock > 1000) return (
-    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>
-      {stock.toLocaleString()} units
+    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded whitespace-nowrap"
+      style={{ color: "#22c55e", background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)" }}>
+      {stock.toLocaleString()}
     </span>
   );
   if (stock > 0) return (
-    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ color: "#fbbf24", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)" }}>
-      {stock.toLocaleString()} units
+    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded whitespace-nowrap"
+      style={{ color: "#eab308", background: "rgba(234,179,8,0.07)", border: "1px solid rgba(234,179,8,0.15)" }}>
+      {stock.toLocaleString()}
     </span>
   );
   return (
-    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ color: "#f87171", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}>
-      Out of Stock
+    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded whitespace-nowrap"
+      style={{ color: "#444", background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
+      0
     </span>
   );
 }
 
-// ── SupplierCard ──────────────────────────────────────────────────────────────
-function SupplierCard({
-  supplier, loading = false, name, tier, isRecommended = false,
-}: {
-  supplier?: SupplierResult;
-  name?: string;
-  tier?: "standard" | "chinese";
-  loading?: boolean;
-  isRecommended?: boolean;
-}) {
-  const displayName = supplier?.supplier ?? name ?? "Supplier";
-  const cardTier = supplier?.tier ?? tier ?? "standard";
-  const style = TIER_STYLE[cardTier];
-
-  if (loading) return (
-    <div className="rounded-2xl p-5 animate-fade-in"
-      style={{ background: style.bg, border: `1px solid ${style.border}` }}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="font-bold text-white/70 text-sm">{displayName}</div>
-        <Loader2 size={14} className="animate-spin" style={{ color: style.color }} />
-      </div>
-      <div className="rounded-xl px-3 py-2.5"
-        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: style.color }} />
-          <span className="text-xs font-mono" style={{ color: style.color }}>Searching via TinyFish...</span>
-        </div>
-        {["Finding product URL...", "Fetching page content...", "Parsing price & stock..."].map((l, i) => (
-          <div key={i} className="flex items-center gap-2 mt-1">
-            <div className="w-1 h-1 rounded-full bg-white/10" />
-            <span className="text-xs text-white/20 font-mono">{l}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  if (!supplier) return null;
-
-  return (
-    <div className="relative rounded-2xl p-5 animate-fade-in transition-all"
-      style={isRecommended
-        ? { background: "rgba(99,102,241,0.10)", border: "1.5px solid rgba(99,102,241,0.45)", boxShadow: "0 8px 40px rgba(99,102,241,0.18)" }
-        : { background: style.bg, border: `1px solid ${style.border}` }}>
-
-      {isRecommended && (
-        <div className="absolute -top-3 left-4 flex items-center gap-1.5 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg"
-          style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-          <Star size={10} />Best Choice
-        </div>
-      )}
-
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="font-bold text-white/90 text-base">{supplier.supplier}</span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ color: style.color, background: style.bg, border: `1px solid ${style.border}` }}>
-              {cardTier === "standard" ? "Standard" : "Chinese"}
-            </span>
-          </div>
-          <div className="text-white/30 text-xs font-mono">{supplier.mpn}</div>
-        </div>
-        <div className="text-right">
-          {supplier.price != null ? (
-            <>
-              <div className="text-xl font-bold text-white">
-                {supplier.currency} {supplier.price.toFixed(supplier.currency === "CNY" ? 2 : 3)}
-              </div>
-              <div className="text-white/30 text-xs">per unit · MOQ {supplier.moq}</div>
-            </>
-          ) : (
-            <div className="text-sm text-white/40">Not listed</div>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-2 mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs text-white/40"><Package size={11} />Stock</div>
-          <StockBadge stock={supplier.stock} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs text-white/40"><Clock size={11} />Lead Time</div>
-          <span className="text-xs font-semibold text-white/70">{supplier.leadTime}</span>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <div className="text-xs font-semibold text-white/60 mb-2">Reasoning</div>
-        <div className="text-xs text-white/50 leading-relaxed bg-white/5 rounded-lg p-3 border border-white/10">
-          {supplier.reason}
-        </div>
-      </div>
-
-      <a href={supplier.url} target="_blank" rel="noopener noreferrer"
-        className="flex items-center gap-1.5 group transition-colors pt-3"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <span className="text-xs text-white/20 truncate flex-1 group-hover:text-indigo-400 transition-colors">{supplier.url}</span>
-        <ExternalLink size={11} className="text-white/15 group-hover:text-indigo-400 shrink-0 transition-colors" />
-      </a>
-    </div>
-  );
+// ── SortIcon ──────────────────────────────────────────────────────────────────
+function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (sortKey !== column) return <ArrowUpDown size={10} style={{ color: "#333" }} />;
+  return sortDir === "asc"
+    ? <ChevronUp size={10} className="text-white" />
+    : <ChevronDown size={10} className="text-white" />;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -268,12 +146,14 @@ export default function OmniProcure() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<SearchPhase>("idle");
-  const [searching, setSearching] = useState<Array<{ name: string; tier: "standard" | "chinese" }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [found, setFound] = useState<SupplierResult[]>([]);
   const [recommendation, setRecommendation] = useState<ClaudeRanking | null>(null);
   const [cached, setCached] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [currentMpn, setCurrentMpn] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("ai");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   // ── Catalog ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -292,8 +172,37 @@ export default function OmniProcure() {
   useEffect(() => {
     if (!query.trim() || selectedPart) { setSuggestions([]); return; }
     const q = query.toLowerCase();
-    setSuggestions(catalog.filter(c => c.part.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)).slice(0, 6));
+    setSuggestions(catalog.filter(c =>
+      c.part.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)
+    ).slice(0, 6));
   }, [query, catalog, selectedPart]);
+
+  // ── Handle column sort ────────────────────────────────────────────────────
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  // ── Sorted + split results ────────────────────────────────────────────────
+  const { actionable, passive } = (() => {
+    const act = found.filter(s => s.hasPrice && s.stock > 0);
+    const pas = found.filter(s => !s.hasPrice || s.stock === 0);
+
+    const sortFn = (a: SupplierResult, b: SupplierResult) => {
+      let diff = 0;
+      if (sortKey === "price") diff = (a.price ?? 9999) - (b.price ?? 9999);
+      else if (sortKey === "stock") diff = b.stock - a.stock;
+      else if (sortKey === "leadtime") diff = a.stock > 0 ? -1 : 1;
+      else {
+        const aRec = recommendation && found.indexOf(a) === recommendation.recommendedIndex ? -1 : 0;
+        const bRec = recommendation && found.indexOf(b) === recommendation.recommendedIndex ? -1 : 0;
+        diff = aRec - bRec || (a.price ?? 9999) - (b.price ?? 9999);
+      }
+      return sortDir === "asc" ? diff : -diff;
+    };
+
+    return { actionable: [...act].sort(sortFn), passive: pas };
+  })();
 
   // ── Main search ───────────────────────────────────────────────────────────
   const runSearch = useCallback(async (mpn: string) => {
@@ -303,19 +212,21 @@ export default function OmniProcure() {
     setQuery(clean);
     setSuggestions([]);
     setPhase("searching");
-    setSearching([]);
+    setIsLoading(true);
     setFound([]);
     setRecommendation(null);
     setCached(false);
     setCachedAt(null);
+    setSortKey("ai");
+    setSortDir("asc");
 
     try {
       const res = await fetch("/api/small-suppliers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mpn: clean, userId: null }),
+        body: JSON.stringify({ mpn: clean }),
       });
-      if (!res.ok) { setPhase("error"); return; }
+      if (!res.ok) { setPhase("error"); setIsLoading(false); return; }
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
@@ -334,24 +245,21 @@ export default function OmniProcure() {
           if (!raw) continue;
           try {
             const ev = JSON.parse(raw);
-            if (ev.type === "supplier_searching") {
-              setSearching(prev => [...prev, { name: ev.name, tier: ev.tier ?? "standard" }]);
-            }
-            if (ev.type === "supplier_found") {
-              setFound(prev => [...prev, ev.supplier]);
-            }
+            if (ev.type === "supplier_found") setFound(prev => [...prev, ev.supplier]);
             if (ev.type === "complete") {
               setRecommendation(ev.recommendation ?? null);
               setCached(ev.cached ?? false);
               setCachedAt(ev.cachedAt ?? null);
               setPhase("done");
+              setIsLoading(false);
             }
-            if (ev.type === "error") setPhase("error");
+            if (ev.type === "error") { setPhase("error"); setIsLoading(false); }
           } catch {}
         }
       }
       setPhase("done");
-    } catch { setPhase("error"); }
+      setIsLoading(false);
+    } catch { setPhase("error"); setIsLoading(false); }
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -360,214 +268,308 @@ export default function OmniProcure() {
 
   const reset = () => {
     setQuery(""); setSelectedPart(null); setCurrentMpn("");
-    setPhase("idle");
-    setSearching([]); setFound([]);
-    setRecommendation(null); setCached(false); setCachedAt(null);
+    setPhase("idle"); setIsLoading(false);
+    setFound([]); setRecommendation(null);
+    setCached(false); setCachedAt(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   // ── PDF ───────────────────────────────────────────────────────────────────
-  const generatePDF = useCallback(async () => {
-    const foundWithPrice = found.filter(s => s.price != null);
-    const winner = recommendation && foundWithPrice[recommendation.recommendedIndex] ? foundWithPrice[recommendation.recommendedIndex] : foundWithPrice[0];
-    if (!winner) return;
+  const generatePDF = useCallback(async (supplier: SupplierResult) => {
     const { default: jsPDF } = await import("jspdf");
     const { default: autoTable } = await import("jspdf-autotable");
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const poNumber = `PO-${Date.now().toString().slice(-8)}`;
     const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
-    doc.setFillColor(15,23,42); doc.rect(0,0,210,40,"F");
+    doc.setFillColor(0,0,0); doc.rect(0,0,210,40,"F");
     doc.setTextColor(255,255,255); doc.setFontSize(22); doc.setFont("helvetica","bold");
     doc.text("OMNIPROCURE",14,18);
-    doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(148,163,184);
+    doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(160,160,160);
     doc.text("Autonomous B2B Procurement Platform",14,26);
     doc.setTextColor(255,255,255); doc.setFontSize(14); doc.setFont("helvetica","bold");
     doc.text("PURCHASE ORDER",196,18,{align:"right"});
     doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.text(poNumber,196,26,{align:"right"});
 
-    doc.setTextColor(30,41,59); doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.text("FROM",14,52);
-    doc.setFont("helvetica","normal"); doc.setTextColor(71,85,105);
-    doc.text("Acme Electronics Ltd.",14,58); doc.text("12 Innovation Park, Pune 411057",14,63);
-    doc.text("GST: 27AABCA1234F1Z5",14,68); doc.text("procurement@acme-electronics.com",14,73);
+    doc.setTextColor(30,30,30); doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.text("FROM",14,52);
+    doc.setFont("helvetica","normal"); doc.setTextColor(80,80,80);
+    doc.text("Your Company Name",14,58);
+    doc.text("Your Address",14,63);
+    doc.text("procurement@yourcompany.com",14,68);
 
-    doc.setTextColor(30,41,59); doc.setFont("helvetica","bold"); doc.text("SUPPLIER",110,52);
-    doc.setFont("helvetica","normal"); doc.setTextColor(71,85,105);
-    doc.text(winner.supplier,110,58);
-    doc.text(`Platform: ${winner.tier==="chinese"?"Chinese Marketplace":"Authorized Distributor"}`,110,63);
-    doc.text(`Stock: ${winner.stock.toLocaleString()} units`,110,68);
-    doc.text(`Lead Time: ${winner.leadTime}`,110,73);
+    doc.setTextColor(30,30,30); doc.setFont("helvetica","bold"); doc.text("SUPPLIER",110,52);
+    doc.setFont("helvetica","normal"); doc.setTextColor(80,80,80);
+    doc.text(supplier.supplier,110,58);
+    doc.text(`Region: ${supplier.region || "Global"}`,110,63);
+    doc.text(`Stock: ${supplier.stock.toLocaleString()} units`,110,68);
+    doc.text(`Lead Time: ${supplier.leadTime}`,110,73);
 
-    doc.setDrawColor(226,232,240); doc.setLineWidth(0.3); doc.line(14,80,196,80);
-    doc.setFontSize(9); doc.setTextColor(71,85,105);
-    doc.text(`Issue Date: ${today}`,14,87); doc.text("Valid For: 30 Days",100,87); doc.text(`Currency: ${winner.currency}`,160,87);
+    doc.setDrawColor(200,200,200); doc.setLineWidth(0.3); doc.line(14,80,196,80);
+    doc.setFontSize(9); doc.setTextColor(80,80,80);
+    doc.text(`Issue Date: ${today}`,14,87);
+    doc.text("Valid For: 30 Days",100,87);
+    doc.text("Currency: USD",160,87);
 
     autoTable(doc,{
-      startY:95,
-      head:[["#","Part Number","Supplier","Platform","Unit Price","MOQ","Total (MOQ)"]],
-      body:[["1",currentMpn,winner.supplier,winner.tier==="chinese"?"Chinese":"Standard",
-        `${winner.currency} ${winner.price?.toFixed(winner.currency==="CNY"?2:3)??"TBD"}`,
-        String(winner.moq),`${winner.currency} ${((winner.price??0)*winner.moq).toFixed(2)}`]],
-      headStyles:{fillColor:[15,23,42],textColor:255,fontStyle:"bold",fontSize:8},
-      bodyStyles:{fontSize:8,textColor:[30,41,59]},
-      alternateRowStyles:{fillColor:[248,250,252]},
+      startY: 95,
+      head:[["#","Part Number","Supplier","Region","Unit Price (USD)","MOQ","Total (MOQ)"]],
+      body:[["1", currentMpn, supplier.supplier, supplier.region || "Global",
+        `USD ${supplier.price?.toFixed(3) ?? "TBD"}`,
+        String(supplier.moq),
+        `USD ${((supplier.price ?? 0) * supplier.moq).toFixed(2)}`]],
+      headStyles:{fillColor:[0,0,0],textColor:255,fontStyle:"bold",fontSize:8},
+      bodyStyles:{fontSize:8,textColor:[30,30,30]},
+      alternateRowStyles:{fillColor:[248,248,248]},
     });
 
-    const finalY=(doc as any).lastAutoTable.finalY+10;
-    if(recommendation){
-      doc.setFillColor(74,111,165); doc.roundedRect(14,finalY,130,14,2,2,"F");
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    const isRec = recommendation && found.indexOf(supplier) === recommendation.recommendedIndex;
+    if (isRec && recommendation) {
+      doc.setFillColor(0,0,0); doc.roundedRect(14,finalY,170,14,2,2,"F");
       doc.setTextColor(255,255,255); doc.setFontSize(7.5); doc.setFont("helvetica","bold");
-      doc.text("AI RECOMMENDED — "+recommendation.reason.slice(0,75),17,finalY+9);
+      doc.text("AI RECOMMENDED — " + recommendation.reason.slice(0,90), 17, finalY+9);
     }
-    doc.setFillColor(248,250,252); doc.rect(0,270,210,27,"F");
-    doc.setTextColor(148,163,184); doc.setFontSize(7.5); doc.setFont("helvetica","normal");
-    doc.text("Auto-generated by OmniProcure AI. Verify pricing before submission.",105,278,{align:"center"});
-    doc.text("OmniProcure · TinyFish Search+Fetch · Claude AI · omniprocure.online",105,284,{align:"center"});
-    doc.save(`Purchase_Order_${currentMpn}.pdf`);
-    setToast("PO Generated Successfully");
-  }, [found, currentMpn, recommendation]);
 
-  const handlePDFClick = () => {
-    generatePDF();
-  };
+    doc.setFillColor(248,248,248); doc.rect(0,270,210,27,"F");
+    doc.setTextColor(160,160,160); doc.setFontSize(7.5); doc.setFont("helvetica","normal");
+    doc.text("Auto-generated by OmniProcure AI. Verify pricing before submission.",105,278,{align:"center"});
+    doc.text("OmniProcure · OEM Secrets API · Claude AI · omniprocure.online",105,284,{align:"center"});
+    doc.save(`PO_${currentMpn}_${supplier.supplier.replace(/\s+/g,"_")}.pdf`);
+    setToast(`PO generated for ${supplier.supplier}`);
+  }, [found, currentMpn, recommendation]);
 
   const hasResults = phase !== "idle";
 
-  // Use searching state if available, else fallback to SUPPLIER_NAMES
-  const displaySuppliers = searching.length > 0 ? searching : SUPPLIER_NAMES;
+  // ── Table Row ─────────────────────────────────────────────────────────────
+  const TableRow = ({ s, isRecommended, dim }: { s: SupplierResult; isRecommended: boolean; dim?: boolean }) => (
+    <tr
+      className="group transition-colors"
+      style={{
+        borderBottom: "1px solid #111",
+        background: isRecommended ? "#0d0d0d" : "transparent",
+        opacity: dim ? 0.3 : 1,
+      }}
+      onMouseEnter={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "#060606"; }}
+      onMouseLeave={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+    >
+      {/* Distributor */}
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-2">
+          {isRecommended && <Star size={10} className="text-white fill-white shrink-0" />}
+          <div>
+            <div className="text-sm font-mono font-medium text-white whitespace-nowrap">{s.supplier}</div>
+            <div className="text-xs font-mono mt-0.5" style={{ color: "#333" }}>{s.mpn}</div>
+          </div>
+        </div>
+      </td>
+
+      {/* Region */}
+      <td className="py-3 px-4">
+        <span className="text-xs font-mono px-2 py-0.5 rounded whitespace-nowrap"
+          style={{ color: "#555", background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
+          {s.region || "Global"}
+        </span>
+      </td>
+
+      {/* Stock */}
+      <td className="py-3 px-4 text-center">
+        <StockBadge stock={s.stock} />
+      </td>
+
+      {/* MOQ */}
+      <td className="py-3 px-4 text-center">
+        <span className="text-xs font-mono" style={{ color: "#444" }}>{s.moq > 0 ? s.moq : "—"}</span>
+      </td>
+
+      {/* Price */}
+      <td className="py-3 px-4 text-right">
+        {s.price != null ? (
+          <span className="text-sm font-mono font-bold text-white">
+            {s.price.toFixed(3)}
+            <span className="text-xs font-normal ml-1" style={{ color: "#444" }}>USD</span>
+          </span>
+        ) : (
+          <span className="text-xs font-mono italic" style={{ color: "#333" }}>On request</span>
+        )}
+      </td>
+
+      {/* Lead Time */}
+      <td className="py-3 px-4 text-center">
+        <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#555" }}>{s.leadTime || "—"}</span>
+      </td>
+
+      {/* Actions */}
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-2 justify-end">
+          {s.url && (
+            <a href={s.url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
+              style={{ color: "#444", border: "1px solid #1a1a1a", background: "#050505" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#fff"; (e.currentTarget as HTMLElement).style.borderColor = "#333"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#444"; (e.currentTarget as HTMLElement).style.borderColor = "#1a1a1a"; }}>
+              <ExternalLink size={10} />
+              <span className="hidden sm:inline">View</span>
+            </a>
+          )}
+          {s.hasPrice && s.stock > 0 && (
+            <button
+              onClick={() => generatePDF(s)}
+              className="flex items-center gap-1 text-xs font-mono font-bold px-2.5 py-1 rounded transition-all whitespace-nowrap"
+              style={isRecommended
+                ? { background: "#fff", color: "#000", border: "1px solid #fff" }
+                : { background: "#0a0a0a", color: "#888", border: "1px solid #222" }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "#fff";
+                (e.currentTarget as HTMLElement).style.color = "#000";
+                (e.currentTarget as HTMLElement).style.borderColor = "#fff";
+              }}
+              onMouseLeave={e => {
+                if (!isRecommended) {
+                  (e.currentTarget as HTMLElement).style.background = "#0a0a0a";
+                  (e.currentTarget as HTMLElement).style.color = "#888";
+                  (e.currentTarget as HTMLElement).style.borderColor = "#222";
+                }
+              }}>
+              <Download size={10} />
+              PO
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
 
   return (
-    <div className="min-h-screen font-sans"
-      style={{ fontFamily:"var(--font-geist),system-ui,sans-serif", background:"linear-gradient(135deg,#030712 0%,#0f0a2e 40%,#0c1445 70%,#030712 100%)" }}>
-
-      {/* Background glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full opacity-20"
-          style={{ background:"radial-gradient(circle,#4338ca 0%,transparent 70%)", filter:"blur(80px)" }} />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full opacity-15"
-          style={{ background:"radial-gradient(circle,#1d4ed8 0%,transparent 70%)", filter:"blur(100px)" }} />
-      </div>
-
-
+    <div className="min-h-screen" style={{ background: "#000", fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}>
 
       {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-40 h-16 flex items-center justify-between px-6"
-        style={{ background:"rgba(3,7,18,0.75)", borderBottom:"1px solid rgba(255,255,255,0.07)", backdropFilter:"blur(20px)" }}>
+      <nav className="fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-6"
+        style={{ background: "#000", borderBottom: "1px solid #111" }}>
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors mr-1">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <Link href="/"
+            className="flex items-center gap-1 mr-2 transition-opacity hover:opacity-50"
+            style={{ color: "#444" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
           </Link>
-          <AtomLogo size={28} />
-          <span className="font-bold text-[16px] tracking-tight text-white">OmniProcure</span>
-          <span className="hidden sm:block text-white/15 text-sm mx-1">|</span>
-          <span className="hidden sm:block text-white/40 text-xs font-medium">Command Center</span>
+          <AtomLogo size={20} />
+          <span className="text-sm font-bold text-white tracking-tight">OmniProcure</span>
+          <span className="text-xs px-2 py-0.5 rounded font-mono hidden sm:inline"
+            style={{ color: "#444", background: "#0a0a0a", border: "1px solid #111" }}>
+            command center
+          </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full"
-            style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.2)" }}>
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded font-mono"
+            style={{ background: "#0a0a0a", border: "1px solid #111" }}>
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50" style={{ background: "#fff" }} />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
             </span>
-            <span className="text-xs text-emerald-400 font-semibold">Live</span>
+            <span className="text-xs text-white">live</span>
           </div>
 
           {cached && phase === "done" && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"
-              style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", color:"#a5b4fc" }}>
-              ⚡ Cached
-            </div>
+            <span className="hidden sm:inline text-xs font-mono px-2.5 py-1 rounded"
+              style={{ color: "#555", background: "#0a0a0a", border: "1px solid #111" }}>
+              ⚡ cached
+            </span>
           )}
 
           <button onClick={() => setSettingsOpen(true)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors"
-            style={{ border:"1px solid rgba(255,255,255,0.08)" }}>
-            <Settings size={15} className="text-white/40" />
+            className="w-8 h-8 rounded flex items-center justify-center transition-all"
+            style={{ border: "1px solid #111", background: "#000", color: "#444" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#333"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#111"; (e.currentTarget as HTMLElement).style.color = "#444"; }}>
+            <Settings size={13} />
           </button>
         </div>
       </nav>
 
-      <main className="relative z-10 pt-16 min-h-screen flex flex-col items-center px-4 pb-16">
+      <main className="pt-14 min-h-screen flex flex-col items-center px-4 pb-16">
 
         {/* Hero */}
-        <div className="mt-14 mb-10 text-center">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full mb-5"
-            style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", color:"#a5b4fc" }}>
-            <Zap size={11} />TinyFish Search + Fetch · Claude AI
+        <div className="mt-16 mb-10 text-center">
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Globe size={11} style={{ color: "#444" }} />
+            <span className="text-xs font-mono" style={{ color: "#444" }}>
+              OEM Secrets · 140+ Distributors · Claude AI
+            </span>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-3">Autonomous Parts Sourcing</h1>
-          <p className="text-white/50 text-sm max-w-xl mx-auto leading-relaxed">
-            Enter any MPN.{" "}
-            <span className="text-indigo-400 font-semibold">LCSC & UTSource</span>{" "}
-            plus{" "}
-            <span className="text-orange-400 font-semibold">Alibaba</span>
-            {" "}— searched in parallel. Claude AI picks the winner.
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-3 font-mono">
+            Parts Sourcing
+          </h1>
+          <p className="text-xs max-w-md mx-auto leading-relaxed font-mono" style={{ color: "#444" }}>
+            Enter any MPN → search 140+ global distributors → Claude picks the best → generate PO
           </p>
         </div>
 
-        {/* Search box */}
-        <div className="w-full max-w-2xl relative mb-8">
-          <div className="flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all"
+        {/* Search */}
+        <div className="w-full max-w-2xl relative mb-10">
+          <div className="flex items-center gap-3 px-4 py-3 transition-all rounded-lg"
             style={selectedPart
-              ? { background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(99,102,241,0.5)", boxShadow:"0 0 30px rgba(99,102,241,0.15)" }
-              : { background:"rgba(255,255,255,0.05)", border:"1.5px solid rgba(255,255,255,0.1)" }}>
+              ? { background: "#0a0a0a", border: "1px solid #fff" }
+              : { background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
             {selectedPart
-              ? <Lock size={16} className="text-indigo-400 shrink-0" />
-              : <Search size={16} className="text-white/30 shrink-0" />}
-            <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown} disabled={!!selectedPart}
-              placeholder="Enter MPN e.g. STM32F103C8T6, LM358DR2G…"
-              className="flex-1 bg-transparent text-white placeholder-white/25 text-sm outline-none font-mono disabled:cursor-not-allowed"
-              autoComplete="off" />
+              ? <Lock size={13} style={{ color: "#fff" }} className="shrink-0" />
+              : <Search size={13} style={{ color: "#333" }} className="shrink-0" />}
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={!!selectedPart}
+              placeholder="STM32F103C8T6, MPU-6050, LM358DR2G…"
+              className="flex-1 bg-transparent text-white text-sm outline-none font-mono disabled:cursor-not-allowed placeholder-neutral-700"
+              autoComplete="off"
+            />
             {selectedPart ? (
-              <button onClick={reset} className="text-white/30 hover:text-white/60 transition-colors"><X size={15} /></button>
+              <button onClick={reset} style={{ color: "#444" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#fff"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#444"}>
+                <X size={13} />
+              </button>
             ) : query.trim() ? (
-              <button onClick={() => runSearch(query.trim())}
-                className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90"
-                style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-                Search
+              <button
+                onClick={() => runSearch(query.trim())}
+                className="text-xs font-mono font-bold px-3 py-1.5 rounded transition-all"
+                style={{ background: "#fff", color: "#000" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#e5e5e5"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#fff"}>
+                Search ↵
               </button>
             ) : null}
           </div>
 
-          {/* Suggestions dropdown */}
+          {/* Suggestions */}
           {query.trim() && !selectedPart && suggestions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden shadow-2xl z-30 animate-fade-in"
-              style={{ background:"rgba(10,8,30,0.97)", border:"1px solid rgba(255,255,255,0.08)", backdropFilter:"blur(20px)" }}>
+            <div className="absolute top-full left-0 right-0 mt-1 overflow-hidden z-30 rounded-lg"
+              style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
               {suggestions.map((item, i) => (
                 <button key={i} onClick={() => runSearch(item.part)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
-                  style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background:"rgba(99,102,241,0.12)", border:"1px solid rgba(99,102,241,0.2)" }}>
-                    <Package size={13} className="text-indigo-400" />
-                  </div>
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+                  style={{ borderBottom: "1px solid #0d0d0d" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#0a0a0a"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                  <Package size={11} style={{ color: "#333" }} className="shrink-0" />
                   <div>
-                    <div className="text-sm font-mono font-semibold text-white/80">{item.part}</div>
-                    <div className="text-xs text-white/30">{item.desc}</div>
+                    <div className="text-xs font-mono font-bold text-white">{item.part}</div>
+                    <div className="text-xs font-mono mt-0.5" style={{ color: "#333" }}>{item.desc}</div>
                   </div>
-                  <ChevronRight size={14} className="text-white/20 ml-auto" />
+                  <ChevronRight size={11} style={{ color: "#222" }} className="ml-auto" />
                 </button>
               ))}
               <button onClick={() => runSearch(query.trim())}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
-                style={{ borderTop:"1px solid rgba(255,255,255,0.06)" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,0.08)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-                  <Search size={13} className="text-white" />
-                </div>
-                <div>
-                  <div className="text-sm font-mono font-semibold text-indigo-400">Search &quot;{query.trim().toUpperCase()}&quot;</div>
-                  <div className="text-xs text-white/30">Search all 3 supplier networks</div>
-                </div>
-                <ChevronRight size={14} className="text-indigo-400/50 ml-auto" />
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#0a0a0a"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                <Search size={11} style={{ color: "#fff" }} className="shrink-0" />
+                <span className="text-xs font-mono font-bold text-white">
+                  Search &quot;{query.trim().toUpperCase()}&quot;
+                </span>
+                <ChevronRight size={11} style={{ color: "#333" }} className="ml-auto" />
               </button>
             </div>
           )}
@@ -575,164 +577,226 @@ export default function OmniProcure() {
 
         {/* ── RESULTS ── */}
         {hasResults && (
-          <div className="w-full max-w-5xl space-y-6">
-            {/* Header row */}
-            <div className="flex items-center justify-between">
+          <div className="w-full max-w-6xl space-y-3">
+
+            {/* Status */}
+            <div className="flex items-center justify-between flex-wrap gap-2 px-1">
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                    style={{ background:"rgba(99,102,241,0.12)", border:"1px solid rgba(99,102,241,0.25)", color:"#a5b4fc" }}>
-                    <Cpu size={11} />Standard
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                    style={{ background:"rgba(249,115,22,0.10)", border:"1px solid rgba(249,115,22,0.25)", color:"#fb923c" }}>
-                    <ShoppingCart size={11} />Chinese
-                  </div>
-                </div>
-                {phase === "searching" && (
-                  <div className="flex items-center gap-2 text-xs text-white/40">
-                    <Loader2 size={12} className="animate-spin text-indigo-400" />
-                    Searching in parallel…
+                {isLoading && (
+                  <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "#444" }}>
+                    <Loader2 size={11} className="animate-spin text-white" />
+                    querying 140+ distributors…
                   </div>
                 )}
                 {phase === "done" && (
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                    <CheckCircle size={12} />
-                    {found.length} found
+                  <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: "#555" }}>
+                    <CheckCircle size={11} className="text-white" />
+                    {found.length} suppliers · {actionable.length} actionable
                     {cached && cachedAt && (
-                      <span className="text-white/25 font-normal ml-1">
-                        · cached {new Date(cachedAt).toLocaleDateString()}
-                      </span>
+                      <span style={{ color: "#333" }}>· cached {new Date(cachedAt).toLocaleDateString()}</span>
                     )}
                   </div>
                 )}
               </div>
-              <div className="text-xs text-white/20 font-mono">{currentMpn}</div>
+              <div className="text-xs font-mono font-bold text-white">{currentMpn}</div>
             </div>
 
-            {/* Claude recommendation banner */}
-            {recommendation && found.length > 0 && (
-              <div className="rounded-2xl px-5 py-4 flex items-start gap-3 animate-fade-in"
-                style={{ background:"rgba(99,102,241,0.08)", border:"1px solid rgba(99,102,241,0.2)" }}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-                  <Star size={14} className="text-white" />
+            {/* AI Banner */}
+            {recommendation && actionable.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg"
+                style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
+                <Star size={11} className="text-white fill-white shrink-0" />
+                <p className="text-xs font-mono" style={{ color: "#555" }}>
+                  <span className="text-white font-bold">ai pick: {recommendation.winner}</span>
+                  {" — "}{recommendation.reason}
+                </p>
+              </div>
+            )}
+
+            {/* Loading skeleton */}
+            {isLoading && found.length === 0 && (
+              <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #111" }}>
+                <div className="px-4 py-2.5 flex items-center gap-2"
+                  style={{ borderBottom: "1px solid #111", background: "#050505" }}>
+                  <Loader2 size={11} className="animate-spin text-white" />
+                  <span className="text-xs font-mono" style={{ color: "#333" }}>querying oem secrets api...</span>
                 </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-sm text-white/90 mb-0.5">Claude AI Recommendation</div>
-                  <div className="text-sm text-white/50">{recommendation.reason}</div>
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-6 px-4 py-3.5 animate-pulse"
+                    style={{ borderBottom: "1px solid #0a0a0a" }}>
+                    <div className="h-2 w-36 rounded" style={{ background: "#111" }} />
+                    <div className="h-2 w-14 rounded" style={{ background: "#0d0d0d" }} />
+                    <div className="h-2 w-14 rounded ml-auto" style={{ background: "#111" }} />
+                    <div className="h-2 w-20 rounded" style={{ background: "#0d0d0d" }} />
+                    <div className="h-2 w-10 rounded" style={{ background: "#111" }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Table */}
+            {found.length > 0 && (
+              <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #111" }}>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ background: "#050505", borderBottom: "1px solid #111" }}>
+                        {[
+                          { key: null,        label: "Distributor", align: "left"   },
+                          { key: null,        label: "Region",      align: "left"   },
+                          { key: "stock",     label: "Stock",       align: "center" },
+                          { key: null,        label: "MOQ",         align: "center" },
+                          { key: "price",     label: "Unit Price",  align: "right"  },
+                          { key: "leadtime",  label: "Lead Time",   align: "center" },
+                          { key: null,        label: "Actions",     align: "right"  },
+                        ].map(({ key, label, align }) => (
+                          <th key={label}
+                            className={`px-4 py-2.5 text-${align} ${key ? "cursor-pointer select-none" : ""}`}
+                            onClick={key ? () => handleSort(key as SortKey) : undefined}>
+                            <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : align === "center" ? "justify-center" : ""}`}>
+                              <span className="text-xs font-mono font-bold tracking-widest uppercase"
+                                style={{ color: key && sortKey === key ? "#fff" : "#333" }}>
+                                {label}
+                              </span>
+                              {key && <SortIcon column={key as SortKey} sortKey={sortKey} sortDir={sortDir} />}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {actionable.map((s, i) => (
+                        <TableRow
+                          key={`${s.supplier}-${i}`}
+                          s={s}
+                          isRecommended={!!(recommendation && found.indexOf(s) === recommendation.recommendedIndex)}
+                        />
+                      ))}
+
+                      {passive.length > 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-2">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 h-px" style={{ background: "#0d0d0d" }} />
+                              <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#222" }}>
+                                out of stock / price on request
+                              </span>
+                              <div className="flex-1 h-px" style={{ background: "#0d0d0d" }} />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {passive.map((s, i) => (
+                        <TableRow
+                          key={`passive-${s.supplier}-${i}`}
+                          s={s}
+                          isRecommended={false}
+                          dim={true}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="text-xs font-bold px-2 py-1 rounded-lg text-indigo-300"
-                  style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.2)" }}>
-                  {recommendation.winner}
+
+                {/* Footer */}
+                <div className="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2"
+                  style={{ borderTop: "1px solid #0d0d0d", background: "#050505" }}>
+                  <span className="text-xs font-mono" style={{ color: "#222" }}>
+                    {found.length} results · oem secrets · 1 api call
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-mono mr-1" style={{ color: "#222" }}>sort:</span>
+                    {(["ai","price","stock","leadtime"] as SortKey[]).map(opt => (
+                      <button key={opt} onClick={() => handleSort(opt)}
+                        className="text-xs px-2 py-0.5 rounded font-mono transition-all"
+                        style={sortKey === opt
+                          ? { background: "#fff", color: "#000", border: "1px solid #fff" }
+                          : { background: "transparent", color: "#333", border: "1px solid #111" }}
+                        onMouseEnter={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#444"; (e.currentTarget as HTMLElement).style.color = "#888"; }}}
+                        onMouseLeave={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#111"; (e.currentTarget as HTMLElement).style.color = "#333"; }}}>
+                        {opt === "ai" ? "★ ai" : opt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Supplier grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {displaySuppliers.map(({ name, tier }) => {
-                const supplierResult = found.find(s => s.supplier === name);
-                const isLoading = !supplierResult && phase === "searching";
-                const foundWithPrice = found.filter(s => s.price != null);
-                const supplierIndex = foundWithPrice.findIndex(s => s.supplier === name);
-                const isRecommended = recommendation && supplierIndex >= 0 ? supplierIndex === recommendation.recommendedIndex : false;
-                return <SupplierCard key={name} supplier={supplierResult} loading={isLoading} name={name} tier={tier} isRecommended={isRecommended} />;
-              })}
-            </div>
-
+            {/* Errors */}
             {phase === "error" && (
-              <div className="rounded-2xl px-5 py-5 flex items-start gap-4"
-                style={{ background:"rgba(248,113,113,0.06)", border:"1px solid rgba(248,113,113,0.2)" }}>
-                <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
+              <div className="px-4 py-4 flex items-start gap-3 rounded-lg"
+                style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
+                <AlertCircle size={13} style={{ color: "#555" }} className="shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-white/80 font-semibold text-sm mb-1">Search failed</div>
-                  <div className="text-white/40 text-sm">Check your connection and try again.</div>
+                  <div className="text-xs font-mono font-bold text-white mb-1">search failed</div>
+                  <div className="text-xs font-mono" style={{ color: "#444" }}>check your connection and try again.</div>
                 </div>
               </div>
             )}
 
             {phase === "done" && found.length === 0 && (
-              <div className="rounded-2xl px-5 py-5 flex items-start gap-4"
-                style={{ background:"rgba(248,113,113,0.06)", border:"1px solid rgba(248,113,113,0.2)" }}>
-                <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
+              <div className="px-4 py-4 flex items-start gap-3 rounded-lg"
+                style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
+                <AlertCircle size={13} style={{ color: "#555" }} className="shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-white/80 font-semibold text-sm mb-1">No results found for {currentMpn}</div>
-                  <div className="text-white/40 text-sm">Verify the MPN and try again. Some parts may not be listed on these platforms.</div>
+                  <div className="text-xs font-mono font-bold text-white mb-1">no results for {currentMpn}</div>
+                  <div className="text-xs font-mono" style={{ color: "#444" }}>verify the mpn and try again.</div>
                 </div>
               </div>
             )}
 
-            {phase === "done" && found.length > 0 && (
-              <button onClick={handlePDFClick}
-                className="w-full flex items-center justify-center gap-2.5 text-white font-semibold py-3.5 rounded-xl animate-fade-in transition-opacity hover:opacity-90"
-                style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)", boxShadow:"0 4px 20px rgba(99,102,241,0.3)" }}>
-                <Download size={16} />
-                Generate Purchase Order (PDF)
-              </button>
-            )}
-
-            <button onClick={reset} className="w-full text-center text-sm text-white/20 hover:text-white/40 py-2 transition-colors">
-              ← Search a different part
+            <button onClick={reset}
+              className="w-full text-center text-xs font-mono py-2 transition-colors"
+              style={{ color: "#222" }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#555"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#222"}>
+              ← search a different part
             </button>
           </div>
         )}
 
         {/* ── IDLE ── */}
         {!hasResults && (
-          <div className="mt-2 w-full max-w-4xl space-y-6 animate-fade-in">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-2xl p-6" style={{ background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.2)" }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                    style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)" }}>
-                    <Cpu size={18} className="text-white" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white/90 text-sm">Standard Distributors</div>
-                    <div className="text-xs text-indigo-400">LCSC</div>
-                  </div>
-                </div>
-                <div className="text-xs text-white/40 leading-relaxed">
-                  Authorized distributors with verified stock, structured pricing, and reliable lead times. Best for production orders.
-                </div>
+          <div className="mt-2 w-full max-w-4xl space-y-3">
+            <div className="p-5 rounded-lg" style={{ background: "#050505", border: "1px solid #111" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Globe size={12} style={{ color: "#fff" }} />
+                <span className="text-xs font-mono font-bold text-white">140+ Global Distributors</span>
               </div>
-              <div className="rounded-2xl p-6" style={{ background:"rgba(249,115,22,0.06)", border:"1px solid rgba(249,115,22,0.2)" }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                    style={{ background:"linear-gradient(135deg,#c2410c,#ea580c)" }}>
-                    <ShoppingCart size={18} className="text-white" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white/90 text-sm">Chinese Platforms</div>
-                    <div className="text-xs text-orange-400">Alibaba · UTSource</div>
-                  </div>
-                </div>
-                <div className="text-xs text-white/40 leading-relaxed">
-                  Competitive pricing for samples and bulk. Alibaba for large orders, UTSource for authorized IC sourcing direct from China.
-                </div>
-              </div>
+              <p className="text-xs font-mono leading-relaxed" style={{ color: "#444" }}>
+                DigiKey · Mouser · Arrow · Avnet · Farnell · RS Components · LCSC · and 130+ more.
+                One MPN, all distributors, prices in USD. Actionable results first.
+              </p>
             </div>
 
-            <div className="rounded-xl px-4 py-3 flex items-center gap-3"
-              style={{ background:"rgba(52,211,153,0.06)", border:"1px solid rgba(52,211,153,0.15)" }}>
-              <Zap size={14} className="text-emerald-400 shrink-0" />
-              <p className="text-xs text-white/40">
-                <span className="text-emerald-400 font-semibold">TinyFish Search + Fetch</span>
-                {" "}— all 3 suppliers searched in parallel using open product pages. Results in ~15s.
-                Cached results return <span className="text-white/70 font-semibold">instantly.</span>
+            <div className="px-4 py-3 rounded-lg flex items-center gap-3"
+              style={{ background: "#050505", border: "1px solid #111" }}>
+              <Zap size={11} style={{ color: "#fff" }} className="shrink-0" />
+              <p className="text-xs font-mono" style={{ color: "#444" }}>
+                <span className="text-white">OEM Secrets API</span>
+                {" "}— 1 search = 140+ distributors = 1 api call. repeated searches return{" "}
+                <span className="text-white">instantly</span>.
               </p>
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-white/25 uppercase tracking-wider mb-3">Try these parts</p>
+              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#222" }}>
+                Try these parts
+              </p>
               <div className="flex flex-wrap gap-2">
                 {FALLBACK_CATALOG.map((item, i) => (
                   <button key={i} onClick={() => runSearch(item.part)}
-                    className="text-white/50 text-xs font-mono font-medium px-3 py-1.5 rounded-lg hover:text-white/80 transition-all"
-                    style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(99,102,241,0.4)")}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}>
+                    className="text-xs font-mono px-3 py-1.5 rounded transition-all"
+                    style={{ background: "#050505", border: "1px solid #111", color: "#444" }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = "#fff";
+                      (e.currentTarget as HTMLElement).style.color = "#fff";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = "#111";
+                      (e.currentTarget as HTMLElement).style.color = "#444";
+                    }}>
                     {item.part}
                   </button>
                 ))}
@@ -742,52 +806,57 @@ export default function OmniProcure() {
         )}
       </main>
 
-      {/* Settings panel */}
+      {/* Settings */}
       {settingsOpen && (
         <>
-          <div className="fixed inset-0 z-40 transition-opacity"
-            style={{ background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
+          <div className="fixed inset-0 z-40" style={{ background: "rgba(0,0,0,0.85)" }}
             onClick={() => setSettingsOpen(false)} />
-          <div className="fixed top-0 right-0 h-full w-80 z-50 flex flex-col shadow-2xl"
-            style={{ background:"rgba(8,5,25,0.98)", borderLeft:"1px solid rgba(99,102,241,0.15)" }}>
+          <div className="fixed top-0 right-0 h-full w-72 z-50 flex flex-col"
+            style={{ background: "#000", borderLeft: "1px solid #111" }}>
             <div className="flex items-center justify-between px-5 py-4"
-              style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+              style={{ borderBottom: "1px solid #111" }}>
               <div className="flex items-center gap-2">
-                <Settings size={15} className="text-indigo-400" />
-                <span className="font-bold text-sm text-white/80">Enterprise Settings</span>
+                <Settings size={12} className="text-white" />
+                <span className="text-xs font-mono font-bold text-white">settings</span>
               </div>
-              <button onClick={() => setSettingsOpen(false)} className="text-white/30 hover:text-white/60 transition-colors">
-                <X size={16} />
+              <button onClick={() => setSettingsOpen(false)}
+                style={{ color: "#444" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#fff"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#444"}>
+                <X size={13} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
-              <p className="text-xs font-semibold text-white/25 uppercase tracking-wider mb-4">Integrations</p>
+              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-4" style={{ color: "#222" }}>
+                Integrations
+              </p>
               {SETTINGS_TOGGLES.map((t, i) => (
                 <div key={i} className="flex items-center justify-between py-3.5"
-                  style={{ borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+                  style={{ borderBottom: "1px solid #0d0d0d" }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-                      style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)" }}>
-                      <t.icon size={13} className="text-white/40" />
+                    <div className="w-6 h-6 rounded flex items-center justify-center"
+                      style={{ background: "#0a0a0a", border: "1px solid #111" }}>
+                      <t.icon size={11} style={{ color: "#444" }} />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-white/70">{t.label}</div>
-                      <div className="text-xs text-white/30">{t.sub}</div>
+                      <div className="text-xs font-mono font-bold text-white">{t.label}</div>
+                      <div className="text-xs font-mono mt-0.5" style={{ color: "#333" }}>{t.sub}</div>
                     </div>
                   </div>
                   <Toggle enabled={t.enabled} />
                 </div>
               ))}
             </div>
-            <div className="px-5 py-4" style={{ borderTop:"1px solid rgba(255,255,255,0.06)" }}>
-              <p className="text-xs text-white/20 text-center">OmniProcure v3.0.0 · TinyFish S+F</p>
+            <div className="px-5 py-4" style={{ borderTop: "1px solid #0d0d0d" }}>
+              <p className="text-xs font-mono text-center" style={{ color: "#222" }}>
+                omniprocure v4.0.0 · oem secrets api
+              </p>
             </div>
           </div>
         </>
       )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-
     </div>
   );
 }
