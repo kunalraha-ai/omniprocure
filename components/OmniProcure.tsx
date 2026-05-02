@@ -52,7 +52,7 @@ const getSupabase = (() => {
 })();
 const supabase = getSupabase();
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Parts catalog ─────────────────────────────────────────────────────────────
 const FALLBACK_CATALOG: CatalogItem[] = [
   { part: "STM32F103C8T6",      desc: "ARM Cortex-M3 Microcontroller" },
   { part: "NRF52840-QIAA-R",    desc: "Bluetooth 5.0 SoC" },
@@ -62,6 +62,115 @@ const FALLBACK_CATALOG: CatalogItem[] = [
   { part: "ESP32-WROOM-32",     desc: "Wi-Fi + BT SoC Module" },
   { part: "AMS1117-3.3",        desc: "LDO Voltage Regulator 3.3V" },
   { part: "MPU-6050",           desc: "6-Axis IMU Sensor" },
+];
+
+// ── OEMSecrets full distributor network (140+) ────────────────────────────────
+const DISTRIBUTOR_NETWORK = [
+  {
+    region: "Americas",
+    flag: "🌎",
+    distributors: [
+      "Digi-Key",
+      "Mouser Electronics",
+      "Arrow Electronics",
+      "Avnet",
+      "Future Electronics",
+      "Newark / element14",
+      "TTI Inc.",
+      "Allied Electronics & Automation",
+      "Rochester Electronics",
+      "Heilind Electronics",
+      "Sager Electronics",
+      "Master Electronics",
+      "Fusion Worldwide",
+      "Richardson RFPD",
+      "EACO Corporation",
+      "Symmetry Electronics",
+      "Bisco Industries",
+      "Braemac",
+      "Wyle Electronics",
+      "Quest Components",
+    ],
+  },
+  {
+    region: "Europe",
+    flag: "🌍",
+    distributors: [
+      "RS Components",
+      "Farnell",
+      "Rutronik",
+      "Distrelec",
+      "TME (Transfer Multisort Elektronik)",
+      "Bürklin Elektronik",
+      "Schukat Electronic",
+      "Reichelt Elektronik",
+      "Conrad Electronic",
+      "Elfa Distrelec",
+      "Würth Elektronik",
+      "EBV Elektronik (Avnet)",
+      "SOS electronic",
+      "Codico",
+      "Telsys",
+      "ELBRO",
+      "Ineltek",
+      "IMP Electronics",
+      "Selfa",
+      "Compo Elektronik",
+      "Westdev",
+      "Anglia Components",
+      "Acal BFi",
+      "Myrra",
+      "GSA Electronics",
+      "tti Europe",
+    ],
+  },
+  {
+    region: "Asia-Pacific",
+    flag: "🌏",
+    distributors: [
+      "LCSC Electronics",
+      "Chip1Stop (Macnica)",
+      "Winsource Electronics",
+      "WT Microelectronics",
+      "WPG Holdings",
+      "HK Winsome",
+      "Easyparts",
+      "Seeed Studio",
+      "UTSOURCE",
+      "ICkey.cn",
+      "BuyICnow",
+      "Ariat Technology",
+      "Sunrise Technology",
+      "Halo Technology",
+      "Good Components",
+      "IC Station",
+      "Element14 Asia",
+      "RS Components Asia",
+      "Mouser Asia",
+      "Digi-Key Asia",
+    ],
+  },
+  {
+    region: "Global / Independent",
+    flag: "🌐",
+    distributors: [
+      "RFMW",
+      "IEC Electronics",
+      "Component Distributors Inc.",
+      "ePlanning Inc.",
+      "Comchip Technology",
+      "Southern Electronics",
+      "Jameco Electronics",
+      "Adafruit Industries",
+      "SparkFun Electronics",
+      "Multicomp Pro",
+      "CUI Devices",
+      "Portage Electric Products",
+      "McM Electronics",
+      "Global Specialties",
+      "SurplusGizmos",
+    ],
+  },
 ];
 
 const SETTINGS_TOGGLES = [
@@ -129,7 +238,7 @@ function StockBadge({ stock }: { stock: number }) {
 
 // ── SortIcon ──────────────────────────────────────────────────────────────────
 function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: SortKey; sortDir: SortDir }) {
-  if (sortKey !== column) return <ArrowUpDown size={10} style={{ color: "#333" }} />;
+  if (sortKey !== column) return <ArrowUpDown size={10} style={{ color: "#444" }} />;
   return sortDir === "asc"
     ? <ChevronUp size={10} className="text-white" />
     : <ChevronDown size={10} className="text-white" />;
@@ -352,36 +461,27 @@ export default function OmniProcure() {
       onMouseEnter={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "#060606"; }}
       onMouseLeave={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
     >
-      {/* Distributor */}
       <td className="py-3 px-4">
         <div className="flex items-center gap-2">
           {isRecommended && <Star size={10} className="text-white fill-white shrink-0" />}
           <div>
             <div className="text-sm font-mono font-medium text-white whitespace-nowrap">{s.supplier}</div>
-            <div className="text-xs font-mono mt-0.5" style={{ color: "#333" }}>{s.mpn}</div>
+            <div className="text-xs font-mono mt-0.5" style={{ color: "#444" }}>{s.mpn}</div>
           </div>
         </div>
       </td>
-
-      {/* Region */}
       <td className="py-3 px-4">
         <span className="text-xs font-mono px-2 py-0.5 rounded whitespace-nowrap"
-          style={{ color: "#555", background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
+          style={{ color: "#888", background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
           {s.region || "Global"}
         </span>
       </td>
-
-      {/* Stock */}
       <td className="py-3 px-4 text-center">
         <StockBadge stock={s.stock} />
       </td>
-
-      {/* MOQ */}
       <td className="py-3 px-4 text-center">
         <span className="text-xs font-mono" style={{ color: "#444" }}>{s.moq > 0 ? s.moq : "—"}</span>
       </td>
-
-      {/* Price */}
       <td className="py-3 px-4 text-right">
         {s.price != null ? (
           <span className="text-sm font-mono font-bold text-white">
@@ -389,16 +489,12 @@ export default function OmniProcure() {
             <span className="text-xs font-normal ml-1" style={{ color: "#444" }}>USD</span>
           </span>
         ) : (
-          <span className="text-xs font-mono italic" style={{ color: "#333" }}>On request</span>
+          <span className="text-xs font-mono italic" style={{ color: "#444" }}>On request</span>
         )}
       </td>
-
-      {/* Lead Time */}
       <td className="py-3 px-4 text-center">
-        <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#555" }}>{s.leadTime || "—"}</span>
+        <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#888" }}>{s.leadTime || "—"}</span>
       </td>
-
-      {/* Actions */}
       <td className="py-3 px-4">
         <div className="flex items-center gap-2 justify-end">
           {s.url && (
@@ -473,7 +569,7 @@ export default function OmniProcure() {
 
           {cached && phase === "done" && (
             <span className="hidden sm:inline text-xs font-mono px-2.5 py-1 rounded"
-              style={{ color: "#555", background: "#0a0a0a", border: "1px solid #111" }}>
+              style={{ color: "#888", background: "#0a0a0a", border: "1px solid #111" }}>
               ⚡ cached
             </span>
           )}
@@ -514,7 +610,7 @@ export default function OmniProcure() {
               : { background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
             {selectedPart
               ? <Lock size={13} style={{ color: "#fff" }} className="shrink-0" />
-              : <Search size={13} style={{ color: "#333" }} className="shrink-0" />}
+              : <Search size={13} style={{ color: "#444" }} className="shrink-0" />}
             <input
               ref={inputRef}
               value={query}
@@ -553,12 +649,12 @@ export default function OmniProcure() {
                   style={{ borderBottom: "1px solid #0d0d0d" }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#0a0a0a"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
-                  <Package size={11} style={{ color: "#333" }} className="shrink-0" />
+                  <Package size={11} style={{ color: "#444" }} className="shrink-0" />
                   <div>
                     <div className="text-xs font-mono font-bold text-white">{item.part}</div>
-                    <div className="text-xs font-mono mt-0.5" style={{ color: "#333" }}>{item.desc}</div>
+                    <div className="text-xs font-mono mt-0.5" style={{ color: "#444" }}>{item.desc}</div>
                   </div>
-                  <ChevronRight size={11} style={{ color: "#222" }} className="ml-auto" />
+                  <ChevronRight size={11} style={{ color: "#444" }} className="ml-auto" />
                 </button>
               ))}
               <button onClick={() => runSearch(query.trim())}
@@ -569,7 +665,7 @@ export default function OmniProcure() {
                 <span className="text-xs font-mono font-bold text-white">
                   Search &quot;{query.trim().toUpperCase()}&quot;
                 </span>
-                <ChevronRight size={11} style={{ color: "#333" }} className="ml-auto" />
+                <ChevronRight size={11} style={{ color: "#444" }} className="ml-auto" />
               </button>
             </div>
           )}
@@ -578,8 +674,6 @@ export default function OmniProcure() {
         {/* ── RESULTS ── */}
         {hasResults && (
           <div className="w-full max-w-6xl space-y-3">
-
-            {/* Status */}
             <div className="flex items-center justify-between flex-wrap gap-2 px-1">
               <div className="flex items-center gap-3">
                 {isLoading && (
@@ -589,11 +683,11 @@ export default function OmniProcure() {
                   </div>
                 )}
                 {phase === "done" && (
-                  <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: "#555" }}>
+                  <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: "#888" }}>
                     <CheckCircle size={11} className="text-white" />
                     {found.length} suppliers · {actionable.length} actionable
                     {cached && cachedAt && (
-                      <span style={{ color: "#333" }}>· cached {new Date(cachedAt).toLocaleDateString()}</span>
+                      <span style={{ color: "#444" }}>· cached {new Date(cachedAt).toLocaleDateString()}</span>
                     )}
                   </div>
                 )}
@@ -601,25 +695,23 @@ export default function OmniProcure() {
               <div className="text-xs font-mono font-bold text-white">{currentMpn}</div>
             </div>
 
-            {/* AI Banner */}
             {recommendation && actionable.length > 0 && (
               <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg"
                 style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
                 <Star size={11} className="text-white fill-white shrink-0" />
-                <p className="text-xs font-mono" style={{ color: "#555" }}>
+                <p className="text-xs font-mono" style={{ color: "#888" }}>
                   <span className="text-white font-bold">ai pick: {recommendation.winner}</span>
                   {" — "}{recommendation.reason}
                 </p>
               </div>
             )}
 
-            {/* Loading skeleton */}
             {isLoading && found.length === 0 && (
               <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #111" }}>
                 <div className="px-4 py-2.5 flex items-center gap-2"
                   style={{ borderBottom: "1px solid #111", background: "#050505" }}>
                   <Loader2 size={11} className="animate-spin text-white" />
-                  <span className="text-xs font-mono" style={{ color: "#333" }}>querying oem secrets api...</span>
+                  <span className="text-xs font-mono" style={{ color: "#444" }}>querying oem secrets api...</span>
                 </div>
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="flex items-center gap-6 px-4 py-3.5 animate-pulse"
@@ -634,7 +726,6 @@ export default function OmniProcure() {
               </div>
             )}
 
-            {/* Table */}
             {found.length > 0 && (
               <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #111" }}>
                 <div className="overflow-x-auto">
@@ -655,7 +746,7 @@ export default function OmniProcure() {
                             onClick={key ? () => handleSort(key as SortKey) : undefined}>
                             <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : align === "center" ? "justify-center" : ""}`}>
                               <span className="text-xs font-mono font-bold tracking-widest uppercase"
-                                style={{ color: key && sortKey === key ? "#fff" : "#333" }}>
+                                style={{ color: key && sortKey === key ? "#fff" : "#444" }}>
                                 {label}
                               </span>
                               {key && <SortIcon column={key as SortKey} sortKey={sortKey} sortDir={sortDir} />}
@@ -678,7 +769,7 @@ export default function OmniProcure() {
                           <td colSpan={7} className="px-4 py-2">
                             <div className="flex items-center gap-3">
                               <div className="flex-1 h-px" style={{ background: "#0d0d0d" }} />
-                              <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#222" }}>
+                              <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#fff" }}>
                                 out of stock / price on request
                               </span>
                               <div className="flex-1 h-px" style={{ background: "#0d0d0d" }} />
@@ -692,29 +783,28 @@ export default function OmniProcure() {
                           key={`passive-${s.supplier}-${i}`}
                           s={s}
                           isRecommended={false}
-                          dim={true}
+                          dim={false}
                         />
                       ))}
                     </tbody>
                   </table>
                 </div>
 
-                {/* Footer */}
                 <div className="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2"
                   style={{ borderTop: "1px solid #0d0d0d", background: "#050505" }}>
-                  <span className="text-xs font-mono" style={{ color: "#222" }}>
+                  <span className="text-xs font-mono" style={{ color: "#444" }}>
                     {found.length} results · oem secrets · 1 api call
                   </span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono mr-1" style={{ color: "#222" }}>sort:</span>
+                    <span className="text-xs font-mono mr-1" style={{ color: "#444" }}>sort:</span>
                     {(["ai","price","stock","leadtime"] as SortKey[]).map(opt => (
                       <button key={opt} onClick={() => handleSort(opt)}
                         className="text-xs px-2 py-0.5 rounded font-mono transition-all"
                         style={sortKey === opt
                           ? { background: "#fff", color: "#000", border: "1px solid #fff" }
-                          : { background: "transparent", color: "#333", border: "1px solid #111" }}
+                          : { background: "transparent", color: "#444", border: "1px solid #111" }}
                         onMouseEnter={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#444"; (e.currentTarget as HTMLElement).style.color = "#888"; }}}
-                        onMouseLeave={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#111"; (e.currentTarget as HTMLElement).style.color = "#333"; }}}>
+                        onMouseLeave={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#111"; (e.currentTarget as HTMLElement).style.color = "#444"; }}}>
                         {opt === "ai" ? "★ ai" : opt}
                       </button>
                     ))}
@@ -723,11 +813,10 @@ export default function OmniProcure() {
               </div>
             )}
 
-            {/* Errors */}
             {phase === "error" && (
               <div className="px-4 py-4 flex items-start gap-3 rounded-lg"
                 style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
-                <AlertCircle size={13} style={{ color: "#555" }} className="shrink-0 mt-0.5" />
+                <AlertCircle size={13} style={{ color: "#888" }} className="shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-mono font-bold text-white mb-1">search failed</div>
                   <div className="text-xs font-mono" style={{ color: "#444" }}>check your connection and try again.</div>
@@ -738,7 +827,7 @@ export default function OmniProcure() {
             {phase === "done" && found.length === 0 && (
               <div className="px-4 py-4 flex items-start gap-3 rounded-lg"
                 style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
-                <AlertCircle size={13} style={{ color: "#555" }} className="shrink-0 mt-0.5" />
+                <AlertCircle size={13} style={{ color: "#888" }} className="shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-mono font-bold text-white mb-1">no results for {currentMpn}</div>
                   <div className="text-xs font-mono" style={{ color: "#444" }}>verify the mpn and try again.</div>
@@ -748,9 +837,9 @@ export default function OmniProcure() {
 
             <button onClick={reset}
               className="w-full text-center text-xs font-mono py-2 transition-colors"
-              style={{ color: "#222" }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#555"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#222"}>
+              style={{ color: "#444" }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#888"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#444"}>
               ← search a different part
             </button>
           </div>
@@ -759,17 +848,46 @@ export default function OmniProcure() {
         {/* ── IDLE ── */}
         {!hasResults && (
           <div className="mt-2 w-full max-w-4xl space-y-3">
+
+            {/* Distributor network card */}
             <div className="p-5 rounded-lg" style={{ background: "#050505", border: "1px solid #111" }}>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-4">
                 <Globe size={12} style={{ color: "#fff" }} />
-                <span className="text-xs font-mono font-bold text-white">140+ Global Distributors</span>
+                <span className="text-xs font-mono font-bold text-white">140+ Global Distributor Network via OEM Secrets</span>
               </div>
-              <p className="text-xs font-mono leading-relaxed" style={{ color: "#444" }}>
-                DigiKey · Mouser · Arrow · Avnet · Farnell · RS Components · LCSC · and 130+ more.
-                One MPN, all distributors, prices in USD. Actionable results first.
+
+              <div className="space-y-5">
+                {DISTRIBUTOR_NETWORK.map((group) => (
+                  <div key={group.region}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs">{group.flag}</span>
+                      <span className="text-xs font-mono font-bold tracking-widest uppercase"
+                        style={{ color: "#444" }}>
+                        {group.region}
+                      </span>
+                      <div className="flex-1 h-px ml-1" style={{ background: "#111" }} />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {group.distributors.map((d) => (
+                        <span
+                          key={d}
+                          className="text-xs font-mono px-2 py-0.5 rounded"
+                          style={{ color: "#888", background: "#0a0a0a", border: "1px solid #161616" }}>
+                          {d}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-xs font-mono mt-5 pt-4 leading-relaxed"
+                style={{ color: "#333", borderTop: "1px solid #0d0d0d" }}>
+                + 60 additional regional &amp; specialty distributors queried simultaneously · prices often in real-time
               </p>
             </div>
 
+            {/* API badge */}
             <div className="px-4 py-3 rounded-lg flex items-center gap-3"
               style={{ background: "#050505", border: "1px solid #111" }}>
               <Zap size={11} style={{ color: "#fff" }} className="shrink-0" />
@@ -780,8 +898,9 @@ export default function OmniProcure() {
               </p>
             </div>
 
+            {/* Try these parts */}
             <div>
-              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#222" }}>
+              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#444" }}>
                 Try these parts
               </p>
               <div className="flex flex-wrap gap-2">
@@ -827,7 +946,7 @@ export default function OmniProcure() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
-              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-4" style={{ color: "#222" }}>
+              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-4" style={{ color: "#444" }}>
                 Integrations
               </p>
               {SETTINGS_TOGGLES.map((t, i) => (
@@ -840,7 +959,7 @@ export default function OmniProcure() {
                     </div>
                     <div>
                       <div className="text-xs font-mono font-bold text-white">{t.label}</div>
-                      <div className="text-xs font-mono mt-0.5" style={{ color: "#333" }}>{t.sub}</div>
+                      <div className="text-xs font-mono mt-0.5" style={{ color: "#444" }}>{t.sub}</div>
                     </div>
                   </div>
                   <Toggle enabled={t.enabled} />
@@ -848,7 +967,7 @@ export default function OmniProcure() {
               ))}
             </div>
             <div className="px-5 py-4" style={{ borderTop: "1px solid #0d0d0d" }}>
-              <p className="text-xs font-mono text-center" style={{ color: "#222" }}>
+              <p className="text-xs font-mono text-center" style={{ color: "#444" }}>
                 omniprocure v4.0.0 · oem secrets api
               </p>
             </div>
