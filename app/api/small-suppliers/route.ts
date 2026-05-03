@@ -66,11 +66,8 @@ interface CacheRow {
 }
 
 // ── Currency fallback order ───────────────────────────────────────────────────
-// Try USD first, then common alternatives. We store the resolved price in USD
-// but note the source currency so the UI can show it accurately.
 const CURRENCY_FALLBACK = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CNY"];
 
-// Rough conversion rates to USD (good enough for ranking; not for invoicing)
 const TO_USD: Record<string, number> = {
   USD: 1,
   EUR: 1.09,
@@ -84,6 +81,18 @@ const TO_USD: Record<string, number> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function normalizeMpn(mpn: string): string {
   return mpn.toUpperCase().replace(/[\s\-_.]/g, "");
+}
+
+// Normalize a distributor name for dedup keying.
+// Strips punctuation, extra spaces, common suffixes so
+// "Arrow Electronics, Inc." and "Arrow Electronics" collapse to the same key.
+function normalizeSupplierName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")          // strip punctuation
+    .replace(/\b(inc|llc|ltd|corp|co|gmbh|bv|ag|srl|pty|plc)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function sseEvent(type: string, data: unknown): string {
@@ -104,9 +113,6 @@ function extractPrice(
   prices: Record<string, Array<{ unit_break: string; unit_price: string }>>,
   sourceCurrency: string
 ): { price: number | null; currency: string } {
-  // 1. Prefer USD directly
-  // 2. Fall back through CURRENCY_FALLBACK
-  // 3. Fall back to source_currency from the API
   const candidates = [
     ...CURRENCY_FALLBACK,
     sourceCurrency?.toUpperCase(),
@@ -117,7 +123,6 @@ function extractPrice(
     if (!list || list.length === 0) continue;
     const parsed = parseFloat(list[0].unit_price);
     if (isNaN(parsed) || parsed <= 0) continue;
-    // Convert to USD for consistent ranking
     const inUsd = cur === "USD" ? parsed : parsed * (TO_USD[cur] ?? 1);
     return { price: parseFloat(inUsd.toFixed(6)), currency: cur };
   }
@@ -129,8 +134,12 @@ function mapToSupplierResult(item: OemSecretsStock, mpn: string): SupplierResult
   const hasPrice = price !== null;
   const stock = item.quantity_in_stock ?? 0;
 
+  // Prefer common name; fall back to raw name
+  const supplier =
+    (item.distributor.distributor_common_name || item.distributor.distributor_name || "").trim();
+
   return {
-    supplier: item.distributor.distributor_common_name || item.distributor.distributor_name,
+    supplier,
     mpn,
     price,
     currency,
@@ -146,24 +155,41 @@ function mapToSupplierResult(item: OemSecretsStock, mpn: string): SupplierResult
   };
 }
 
-// ── Dedup: one row per distributor, keep best (score tier → highest stock) ────
+// ── Dedup ─────────────────────────────────────────────────────────────────────
+// Groups by normalized name. Within each group keeps the single best row:
+//   1. Highest score tier (price+stock > price-only > stock-only > nothing)
+//   2. Within same tier: highest stock
+//   3. Within same tier+stock: lowest price
+// This means a common part like ATMEGA328P can return 80+ unique distributors
+// instead of being collapsed down to 20 by an arbitrary slice.
 function deduplicateBySupplier(results: SupplierResult[]): SupplierResult[] {
-  return results.reduce((acc, curr) => {
-    const existingIdx = acc.findIndex(s => s.supplier === curr.supplier);
-    if (existingIdx === -1) {
-      acc.push(curr);
-    } else {
-      const existing = acc[existingIdx];
-      const existingScore = getScore(existing);
-      const currScore = getScore(curr);
-      if (currScore > existingScore) {
-        acc[existingIdx] = curr;
-      } else if (currScore === existingScore && curr.stock > existing.stock) {
-        acc[existingIdx] = curr;
+  const map = new Map<string, SupplierResult>();
+
+  for (const curr of results) {
+    const key = normalizeSupplierName(curr.supplier);
+    if (!key) continue; // skip rows with no supplier name
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, curr);
+      continue;
+    }
+
+    const existingScore = getScore(existing);
+    const currScore = getScore(curr);
+
+    if (currScore > existingScore) {
+      map.set(key, curr);
+    } else if (currScore === existingScore) {
+      if (curr.stock > existing.stock) {
+        map.set(key, curr);
+      } else if (curr.stock === existing.stock && curr.price !== null && existing.price !== null && curr.price < existing.price) {
+        map.set(key, curr);
       }
     }
-    return acc;
-  }, [] as SupplierResult[]);
+  }
+
+  return Array.from(map.values());
 }
 
 // ── OEM Secrets API ───────────────────────────────────────────────────────────
@@ -180,17 +206,24 @@ async function fetchOemSecrets(mpn: string): Promise<SupplierResult[]> {
   }
 
   const data: OemSecretsResponse = await res.json();
-  console.log(`[OemSecrets] ${data.parts_returned} parts returned`);
+  console.log(`[OemSecrets] Raw response: ${data.parts_returned} rows from API`);
 
   if (!data.stock || data.stock.length === 0) return [];
 
-  // 1. Map all to SupplierResult
+  // 1. Log raw distributor names to help diagnose dedup collisions
+  const rawNames = data.stock.map(
+    item => item.distributor.distributor_common_name || item.distributor.distributor_name
+  );
+  console.log(`[OemSecrets] Raw distributors (${rawNames.length}): ${[...new Set(rawNames)].join(", ")}`);
+
+  // 2. Map all rows → SupplierResult
   const mapped = data.stock.map(item => mapToSupplierResult(item, mpn));
 
-  // 2. Deduplicate — one row per distributor
+  // 3. Deduplicate — one row per logical distributor
   const deduped = deduplicateBySupplier(mapped);
+  console.log(`[OemSecrets] After dedup: ${deduped.length} unique distributors`);
 
-  // 3. Sort: score desc, then price asc within same tier
+  // 4. Sort: score desc → price asc within same tier
   const sorted = deduped.sort((a, b) => {
     const scoreDiff = getScore(b) - getScore(a);
     if (scoreDiff !== 0) return scoreDiff;
@@ -198,8 +231,8 @@ async function fetchOemSecrets(mpn: string): Promise<SupplierResult[]> {
     return 0;
   });
 
-  // 4. Return ALL unique suppliers (no arbitrary cap — UI shows everything)
-  console.log(`[OemSecrets] ${deduped.length} unique suppliers after dedup`);
+  // ── NO SLICE — return every unique distributor the API gives us ──
+  console.log(`[OemSecrets] Returning all ${sorted.length} unique suppliers`);
   return sorted;
 }
 
@@ -227,7 +260,10 @@ async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise
   const actionable = suppliers.filter(s => s.hasPrice && s.stock > 0);
   if (!apiKey || actionable.length <= 1) return fallback();
 
-  console.log(`[Rank] Ranking ${actionable.length} actionable suppliers via Claude`);
+  // Cap the list sent to Claude at top 30 actionable to keep the prompt tight
+  // (Claude doesn't need all 80+ rows to pick the best — just the competitive ones)
+  const topActionable = actionable.slice(0, 30);
+  console.log(`[Rank] Sending ${topActionable.length} actionable suppliers to Claude`);
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -245,10 +281,10 @@ async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise
             role: "user",
             content:
               `You are a procurement expert. Pick the single best supplier for "${mpn}".\n` +
-              `Scoring: stock availability 40%, unit price 35%, lead time & reliability 25%.\n` +
+              `Scoring weights: stock availability 40%, unit price 35%, lead time & reliability 25%.\n` +
               `Only consider suppliers where hasPrice=true and stock>0.\n\n` +
               JSON.stringify(
-                actionable.map(s => ({
+                topActionable.map(s => ({
                   index: suppliers.findIndex(x => x.supplier === s.supplier),
                   supplier: s.supplier,
                   price: s.price,
@@ -259,7 +295,7 @@ async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise
                 }))
               ) +
               `\n\nRespond ONLY with raw JSON (no markdown, no code fences):\n` +
-              `{"winner":"<supplier name>","recommendedIndex":<index in original array>,"reason":"<max 120 chars>"}`,
+              `{"winner":"<supplier name>","recommendedIndex":<index in original array>,"reason":"<max 120 chars plain English, explain why this supplier beats the others>"}`,
           },
         ],
       }),
@@ -285,7 +321,7 @@ async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise
 }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
-const CACHE_TTL_HOURS = 24; // Reduced from 72h — pricing data changes daily
+const CACHE_TTL_HOURS = 24;
 
 async function checkCache(mpnNormalized: string): Promise<CacheRow | null> {
   try {
@@ -373,7 +409,7 @@ export async function POST(req: NextRequest) {
           const results: SupplierResult[] = cached.results ?? [];
           for (const r of results) {
             send("supplier_found", { supplier: r });
-            await new Promise(resolve => setTimeout(resolve, 30));
+            await new Promise(resolve => setTimeout(resolve, 20));
           }
           send("complete", {
             mpn,
@@ -412,17 +448,17 @@ export async function POST(req: NextRequest) {
         // ── 3. Stream results one by one ────────────────────────────────
         for (const r of results) {
           send("supplier_found", { supplier: r });
-          await new Promise(resolve => setTimeout(resolve, 30));
+          await new Promise(resolve => setTimeout(resolve, 20));
         }
 
-        // ── 4. Claude ranking (actionable suppliers only) ───────────────
+        // ── 4. Claude ranking ───────────────────────────────────────────
         let recommendation: ClaudeRanking | null = null;
         const actionable = results.filter(s => s.hasPrice && s.stock > 0);
         if (actionable.length >= 1) {
           recommendation = await rankWithClaude(mpn, results);
         }
 
-        // ── 5. Persist to cache + complete ──────────────────────────────
+        // ── 5. Save cache + complete ────────────────────────────────────
         saveCache(mpnNormalized, results, recommendation);
         send("complete", {
           mpn,

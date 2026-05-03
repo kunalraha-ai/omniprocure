@@ -8,6 +8,7 @@ import {
   Download, Zap, Database, RefreshCw, ShieldCheck, Lock,
   ChevronRight, Star, AlertCircle, Loader2,
   ExternalLink, Globe, ChevronUp, ChevronDown, ArrowUpDown,
+  Info, TriangleAlert, BadgeCheck, ShieldAlert,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ const getSupabase = (() => {
 })();
 const supabase = getSupabase();
 
-// ── Parts catalog ─────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 const FALLBACK_CATALOG: CatalogItem[] = [
   { part: "STM32F103C8T6",      desc: "ARM Cortex-M3 Microcontroller" },
   { part: "NRF52840-QIAA-R",    desc: "Bluetooth 5.0 SoC" },
@@ -64,112 +65,22 @@ const FALLBACK_CATALOG: CatalogItem[] = [
   { part: "MPU-6050",           desc: "6-Axis IMU Sensor" },
 ];
 
-// ── OEMSecrets full distributor network (140+) ────────────────────────────────
 const DISTRIBUTOR_NETWORK = [
   {
-    region: "Americas",
-    flag: "🌎",
-    distributors: [
-      "Digi-Key",
-      "Mouser Electronics",
-      "Arrow Electronics",
-      "Avnet",
-      "Future Electronics",
-      "Newark / element14",
-      "TTI Inc.",
-      "Allied Electronics & Automation",
-      "Rochester Electronics",
-      "Heilind Electronics",
-      "Sager Electronics",
-      "Master Electronics",
-      "Fusion Worldwide",
-      "Richardson RFPD",
-      "EACO Corporation",
-      "Symmetry Electronics",
-      "Bisco Industries",
-      "Braemac",
-      "Wyle Electronics",
-      "Quest Components",
-    ],
+    region: "Americas", flag: "🌎",
+    distributors: ["Digi-Key","Mouser Electronics","Arrow Electronics","Avnet","Future Electronics","Newark / element14","TTI Inc.","Allied Electronics","Rochester Electronics","Heilind Electronics","Sager Electronics","Master Electronics","Fusion Worldwide","Richardson RFPD","EACO Corporation","Symmetry Electronics","Bisco Industries","Braemac","Wyle Electronics","Quest Components"],
   },
   {
-    region: "Europe",
-    flag: "🌍",
-    distributors: [
-      "RS Components",
-      "Farnell",
-      "Rutronik",
-      "Distrelec",
-      "TME (Transfer Multisort Elektronik)",
-      "Bürklin Elektronik",
-      "Schukat Electronic",
-      "Reichelt Elektronik",
-      "Conrad Electronic",
-      "Elfa Distrelec",
-      "Würth Elektronik",
-      "EBV Elektronik (Avnet)",
-      "SOS electronic",
-      "Codico",
-      "Telsys",
-      "ELBRO",
-      "Ineltek",
-      "IMP Electronics",
-      "Selfa",
-      "Compo Elektronik",
-      "Westdev",
-      "Anglia Components",
-      "Acal BFi",
-      "Myrra",
-      "GSA Electronics",
-      "tti Europe",
-    ],
+    region: "Europe", flag: "🌍",
+    distributors: ["RS Components","Farnell","Rutronik","Distrelec","TME (Transfer Multisort Elektronik)","Bürklin Elektronik","Schukat Electronic","Reichelt Elektronik","Conrad Electronic","Elfa Distrelec","Würth Elektronik","EBV Elektronik (Avnet)","SOS electronic","Codico","Telsys","ELBRO","Ineltek","IMP Electronics","Selfa","Compo Elektronik","Westdev","Anglia Components","Acal BFi","Myrra","GSA Electronics","tti Europe"],
   },
   {
-    region: "Asia-Pacific",
-    flag: "🌏",
-    distributors: [
-      "LCSC Electronics",
-      "Chip1Stop (Macnica)",
-      "Winsource Electronics",
-      "WT Microelectronics",
-      "WPG Holdings",
-      "HK Winsome",
-      "Easyparts",
-      "Seeed Studio",
-      "UTSOURCE",
-      "ICkey.cn",
-      "BuyICnow",
-      "Ariat Technology",
-      "Sunrise Technology",
-      "Halo Technology",
-      "Good Components",
-      "IC Station",
-      "Element14 Asia",
-      "RS Components Asia",
-      "Mouser Asia",
-      "Digi-Key Asia",
-    ],
+    region: "Asia-Pacific", flag: "🌏",
+    distributors: ["LCSC Electronics","Chip1Stop (Macnica)","Winsource Electronics","WT Microelectronics","WPG Holdings","HK Winsome","Easyparts","Seeed Studio","UTSOURCE","ICkey.cn","BuyICnow","Ariat Technology","Sunrise Technology","Halo Technology","Good Components","IC Station","Element14 Asia","RS Components Asia","Mouser Asia","Digi-Key Asia"],
   },
   {
-    region: "Global / Independent",
-    flag: "🌐",
-    distributors: [
-      "RFMW",
-      "IEC Electronics",
-      "Component Distributors Inc.",
-      "ePlanning Inc.",
-      "Comchip Technology",
-      "Southern Electronics",
-      "Jameco Electronics",
-      "Adafruit Industries",
-      "SparkFun Electronics",
-      "Multicomp Pro",
-      "CUI Devices",
-      "Portage Electric Products",
-      "McM Electronics",
-      "Global Specialties",
-      "SurplusGizmos",
-    ],
+    region: "Global / Independent", flag: "🌐",
+    distributors: ["RFMW","IEC Electronics","Component Distributors Inc.","ePlanning Inc.","Comchip Technology","Southern Electronics","Jameco Electronics","Adafruit Industries","SparkFun Electronics","Multicomp Pro","CUI Devices","Portage Electric Products","McM Electronics","Global Specialties","SurplusGizmos"],
   },
 ];
 
@@ -180,68 +91,89 @@ const SETTINGS_TOGGLES = [
   { label: "SOC 2 Audit Logging",      sub: "Immutable event trail",          icon: ShieldCheck, enabled: true  },
 ];
 
-// ── Atom logo ─────────────────────────────────────────────────────────────────
+// ── Stock classification — for badges only, NEVER for hiding rows ─────────────
+// Every row the API returns is shown. Low stock gets a warning, not removal.
+function stockTier(stock: number): "high" | "medium" | "low" | "suspect" | "zero" {
+  if (stock === 0)   return "zero";
+  if (stock < 5)     return "suspect";    // ⚠ very low — likely stale data
+  if (stock < 25)    return "low";        // amber — worth flagging
+  if (stock < 500)   return "medium";     // blue
+  return "high";                          // green
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function AtomLogo({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="white" strokeWidth="4" fill="none"/>
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="white" strokeWidth="4" fill="none" transform="rotate(60 50 50)" opacity="0.6"/>
-      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="white" strokeWidth="4" fill="none" transform="rotate(120 50 50)" opacity="0.3"/>
-      <circle cx="50" cy="50" r="7" fill="white"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="#1a56db" strokeWidth="5" fill="none"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="#1a56db" strokeWidth="5" fill="none" transform="rotate(60 50 50)" opacity="0.5"/>
+      <ellipse cx="50" cy="50" rx="45" ry="18" stroke="#1a56db" strokeWidth="5" fill="none" transform="rotate(120 50 50)" opacity="0.25"/>
+      <circle cx="50" cy="50" r="7" fill="#1a56db"/>
     </svg>
   );
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl"
-      style={{ background: "#000", border: "1px solid #333" }}>
-      <CheckCircle size={13} className="text-white shrink-0" />
-      <span className="text-xs font-mono text-white">{message}</span>
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl"
+      style={{ background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}>
+      <CheckCircle size={15} style={{ color: "#16a34a" }} />
+      <span className="text-sm font-medium" style={{ color: "#111827" }}>{message}</span>
     </div>
   );
 }
 
-// ── Toggle ────────────────────────────────────────────────────────────────────
 function Toggle({ enabled }: { enabled: boolean }) {
   return (
     <div className="relative w-9 h-5 rounded-full transition-colors duration-200"
-      style={{ background: enabled ? "#fff" : "#222" }}>
-      <div className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform duration-200 ${enabled ? "translate-x-4 bg-black" : "translate-x-0.5 bg-neutral-600"}`} />
+      style={{ background: enabled ? "#1a56db" : "#d1d5db" }}>
+      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${enabled ? "translate-x-4" : "translate-x-0.5"}`} />
     </div>
   );
 }
 
-// ── StockBadge ────────────────────────────────────────────────────────────────
 function StockBadge({ stock }: { stock: number }) {
-  if (stock > 1000) return (
-    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded whitespace-nowrap"
-      style={{ color: "#22c55e", background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)" }}>
+  const tier = stockTier(stock);
+
+  if (tier === "zero") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded"
+      style={{ color: "#6b7280", background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
+      0
+    </span>
+  );
+  if (tier === "suspect") return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded"
+      style={{ color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a" }}>
+      <TriangleAlert size={9} />
       {stock.toLocaleString()}
     </span>
   );
-  if (stock > 0) return (
-    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded whitespace-nowrap"
-      style={{ color: "#eab308", background: "rgba(234,179,8,0.07)", border: "1px solid rgba(234,179,8,0.15)" }}>
+  if (tier === "low") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded"
+      style={{ color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a" }}>
+      {stock.toLocaleString()}
+    </span>
+  );
+  if (tier === "medium") return (
+    <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded"
+      style={{ color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe" }}>
       {stock.toLocaleString()}
     </span>
   );
   return (
-    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded whitespace-nowrap"
-      style={{ color: "#444", background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
-      0
+    <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded"
+      style={{ color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+      {stock.toLocaleString()}
     </span>
   );
 }
 
-// ── SortIcon ──────────────────────────────────────────────────────────────────
 function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: SortKey; sortDir: SortDir }) {
-  if (sortKey !== column) return <ArrowUpDown size={10} style={{ color: "#444" }} />;
+  if (sortKey !== column) return <ArrowUpDown size={11} style={{ color: "#9ca3af" }} />;
   return sortDir === "asc"
-    ? <ChevronUp size={10} className="text-white" />
-    : <ChevronDown size={10} className="text-white" />;
+    ? <ChevronUp size={11} style={{ color: "#1a56db" }} />
+    : <ChevronDown size={11} style={{ color: "#1a56db" }} />;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -277,7 +209,6 @@ export default function OmniProcure() {
     load();
   }, []);
 
-  // ── Suggestions ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!query.trim() || selectedPart) { setSuggestions([]); return; }
     const q = query.toLowerCase();
@@ -286,23 +217,28 @@ export default function OmniProcure() {
     ).slice(0, 6));
   }, [query, catalog, selectedPart]);
 
-  // ── Handle column sort ────────────────────────────────────────────────────
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  // ── Sorted + split results ────────────────────────────────────────────────
-  const { actionable, passive } = (() => {
-    const act = found.filter(s => s.hasPrice && s.stock > 0);
-    const pas = found.filter(s => !s.hasPrice || s.stock === 0);
+  // ── Split results into sections — NO rows are ever hidden ─────────────────
+  // Section 1: has price + stock > 0  → fully actionable
+  // Section 2: has price + stock = 0  → out of stock but priced
+  // Section 3: no price               → contact for quote
+  // ALL three sections render. Nothing is dropped.
+  const { withPriceInStock, outOfStock, onRequest, totalActionable } = (() => {
+    const inStock   = found.filter(s => s.hasPrice && s.stock > 0);
+    const noStock   = found.filter(s => s.hasPrice && s.stock === 0);
+    const noPrice   = found.filter(s => !s.hasPrice);
 
     const sortFn = (a: SupplierResult, b: SupplierResult) => {
       let diff = 0;
-      if (sortKey === "price") diff = (a.price ?? 9999) - (b.price ?? 9999);
-      else if (sortKey === "stock") diff = b.stock - a.stock;
-      else if (sortKey === "leadtime") diff = a.stock > 0 ? -1 : 1;
+      if (sortKey === "price")    diff = (a.price ?? 9999) - (b.price ?? 9999);
+      else if (sortKey === "stock")    diff = b.stock - a.stock;
+      else if (sortKey === "leadtime") diff = (a.leadTime ?? "").localeCompare(b.leadTime ?? "");
       else {
+        // AI sort: recommended first, then price
         const aRec = recommendation && found.indexOf(a) === recommendation.recommendedIndex ? -1 : 0;
         const bRec = recommendation && found.indexOf(b) === recommendation.recommendedIndex ? -1 : 0;
         diff = aRec - bRec || (a.price ?? 9999) - (b.price ?? 9999);
@@ -310,10 +246,15 @@ export default function OmniProcure() {
       return sortDir === "asc" ? diff : -diff;
     };
 
-    return { actionable: [...act].sort(sortFn), passive: pas };
+    return {
+      withPriceInStock: [...inStock].sort(sortFn),
+      outOfStock: [...noStock].sort(sortFn),
+      onRequest: noPrice,
+      totalActionable: inStock.length,
+    };
   })();
 
-  // ── Main search ───────────────────────────────────────────────────────────
+  // ── Search ────────────────────────────────────────────────────────────────
   const runSearch = useCallback(async (mpn: string) => {
     const clean = mpn.trim().toUpperCase();
     setCurrentMpn(clean);
@@ -391,10 +332,10 @@ export default function OmniProcure() {
     const poNumber = `PO-${Date.now().toString().slice(-8)}`;
     const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
-    doc.setFillColor(0,0,0); doc.rect(0,0,210,40,"F");
+    doc.setFillColor(26,86,219); doc.rect(0,0,210,40,"F");
     doc.setTextColor(255,255,255); doc.setFontSize(22); doc.setFont("helvetica","bold");
     doc.text("OMNIPROCURE",14,18);
-    doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(160,160,160);
+    doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(200,220,255);
     doc.text("Autonomous B2B Procurement Platform",14,26);
     doc.setTextColor(255,255,255); doc.setFontSize(14); doc.setFont("helvetica","bold");
     doc.text("PURCHASE ORDER",196,18,{align:"right"});
@@ -402,8 +343,7 @@ export default function OmniProcure() {
 
     doc.setTextColor(30,30,30); doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.text("FROM",14,52);
     doc.setFont("helvetica","normal"); doc.setTextColor(80,80,80);
-    doc.text("Your Company Name",14,58);
-    doc.text("Your Address",14,63);
+    doc.text("Your Company Name",14,58); doc.text("Your Address",14,63);
     doc.text("procurement@yourcompany.com",14,68);
 
     doc.setTextColor(30,30,30); doc.setFont("helvetica","bold"); doc.text("SUPPLIER",110,52);
@@ -422,26 +362,25 @@ export default function OmniProcure() {
     autoTable(doc,{
       startY: 95,
       head:[["#","Part Number","Supplier","Region","Unit Price (USD)","MOQ","Total (MOQ)"]],
-      body:[["1", currentMpn, supplier.supplier, supplier.region || "Global",
-        `USD ${supplier.price?.toFixed(3) ?? "TBD"}`,
-        String(supplier.moq),
-        `USD ${((supplier.price ?? 0) * supplier.moq).toFixed(2)}`]],
-      headStyles:{fillColor:[0,0,0],textColor:255,fontStyle:"bold",fontSize:8},
+      body:[["1", currentMpn, supplier.supplier, supplier.region||"Global",
+        `USD ${supplier.price?.toFixed(3)??"TBD"}`, String(supplier.moq),
+        `USD ${((supplier.price??0)*supplier.moq).toFixed(2)}`]],
+      headStyles:{fillColor:[26,86,219],textColor:255,fontStyle:"bold",fontSize:8},
       bodyStyles:{fontSize:8,textColor:[30,30,30]},
-      alternateRowStyles:{fillColor:[248,248,248]},
+      alternateRowStyles:{fillColor:[248,250,255]},
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     const isRec = recommendation && found.indexOf(supplier) === recommendation.recommendedIndex;
     if (isRec && recommendation) {
-      doc.setFillColor(0,0,0); doc.roundedRect(14,finalY,170,14,2,2,"F");
+      doc.setFillColor(26,86,219); doc.roundedRect(14,finalY,170,14,2,2,"F");
       doc.setTextColor(255,255,255); doc.setFontSize(7.5); doc.setFont("helvetica","bold");
       doc.text("AI RECOMMENDED — " + recommendation.reason.slice(0,90), 17, finalY+9);
     }
 
-    doc.setFillColor(248,248,248); doc.rect(0,270,210,27,"F");
+    doc.setFillColor(248,250,255); doc.rect(0,270,210,27,"F");
     doc.setTextColor(160,160,160); doc.setFontSize(7.5); doc.setFont("helvetica","normal");
-    doc.text("Auto-generated by OmniProcure AI. Verify pricing before submission.",105,278,{align:"center"});
+    doc.text("Auto-generated by OmniProcure AI. Verify pricing and stock before submission.",105,278,{align:"center"});
     doc.text("OmniProcure · OEM Secrets API · Claude AI · omniprocure.online",105,284,{align:"center"});
     doc.save(`PO_${currentMpn}_${supplier.supplier.replace(/\s+/g,"_")}.pdf`);
     setToast(`PO generated for ${supplier.supplier}`);
@@ -449,137 +388,249 @@ export default function OmniProcure() {
 
   const hasResults = phase !== "idle";
 
-  // ── Table Row ─────────────────────────────────────────────────────────────
-  const TableRow = ({ s, isRecommended, dim }: { s: SupplierResult; isRecommended: boolean; dim?: boolean }) => (
-    <tr
-      className="group transition-colors"
-      style={{
-        borderBottom: "1px solid #111",
-        background: isRecommended ? "#0d0d0d" : "transparent",
-        opacity: dim ? 0.3 : 1,
-      }}
-      onMouseEnter={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "#060606"; }}
-      onMouseLeave={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-    >
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-2">
-          {isRecommended && <Star size={10} className="text-white fill-white shrink-0" />}
-          <div>
-            <div className="text-sm font-mono font-medium text-white whitespace-nowrap">{s.supplier}</div>
-            <div className="text-xs font-mono mt-0.5" style={{ color: "#444" }}>{s.mpn}</div>
+  // ── Row components ────────────────────────────────────────────────────────
+
+  // Full actionable row — has price + stock
+  const ActionableRow = ({ s, isRecommended }: { s: SupplierResult; isRecommended: boolean }) => {
+    const tier = stockTier(s.stock);
+    const isSuspect = tier === "suspect" || tier === "low";
+    return (
+      <tr className="group transition-colors"
+        style={{ borderBottom: "1px solid #f1f5f9", background: isRecommended ? "#eff6ff" : "transparent" }}
+        onMouseEnter={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "#f8fafc"; }}
+        onMouseLeave={e => { if (!isRecommended) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            {isRecommended && <BadgeCheck size={14} style={{ color: "#1a56db" }} className="shrink-0" />}
+            <div>
+              <div className="text-sm font-semibold whitespace-nowrap" style={{ color: "#111827" }}>{s.supplier}</div>
+              <div className="text-xs mt-0.5 font-mono" style={{ color: "#9ca3af" }}>{s.mpn}</div>
+            </div>
           </div>
-        </div>
+        </td>
+
+        <td className="py-3 px-4">
+          <span className="text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap"
+            style={{ color: "#374151", background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
+            {s.region || "Global"}
+          </span>
+        </td>
+
+        <td className="py-3 px-4 text-center">
+          <div className="flex flex-col items-center gap-0.5">
+            <StockBadge stock={s.stock} />
+            {isSuspect && (
+              <span className="text-xs leading-none" style={{ color: "#b45309" }}>verify qty</span>
+            )}
+          </div>
+        </td>
+
+        <td className="py-3 px-4 text-center">
+          <span className="text-sm font-medium" style={{ color: "#374151" }}>
+            {s.moq > 0 ? s.moq.toLocaleString() : "—"}
+          </span>
+        </td>
+
+        {/* Price — biggest & boldest number on the row */}
+        <td className="py-3 px-4 text-right">
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="text-lg font-bold leading-none" style={{ color: "#111827" }}>
+              ${s.price?.toFixed(3)}
+            </span>
+            <span className="text-xs" style={{ color: "#9ca3af" }}>per unit · USD</span>
+          </div>
+        </td>
+
+        <td className="py-3 px-4 text-center">
+          <span className="text-sm font-medium whitespace-nowrap" style={{ color: "#374151" }}>
+            {s.leadTime || "—"}
+          </span>
+        </td>
+
+        <td className="py-3 px-4 text-center hidden lg:table-cell">
+          <span className="text-xs inline-flex items-center gap-1" style={{ color: "#d1d5db" }}>
+            <ShieldAlert size={10} />
+            Verify before ordering
+          </span>
+        </td>
+
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2 justify-end">
+            {s.url && (
+              <a href={s.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md transition-all"
+                style={{ color: "#374151", border: "1px solid #e5e7eb", background: "#fff" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#1a56db"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#374151"; }}>
+                <ExternalLink size={11} /> View
+              </a>
+            )}
+            <button onClick={() => generatePDF(s)}
+              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md transition-all whitespace-nowrap"
+              style={isRecommended
+                ? { background: "#1a56db", color: "#fff", border: "1px solid #1a56db" }
+                : { background: "#fff", color: "#374151", border: "1px solid #e5e7eb" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#fff"; (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; }}
+              onMouseLeave={e => { if (!isRecommended) { (e.currentTarget as HTMLElement).style.background = "#fff"; (e.currentTarget as HTMLElement).style.color = "#374151"; (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; } }}>
+              <Download size={10} /> PO
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  // Dimmed row — priced but out of stock
+  const OutOfStockRow = ({ s }: { s: SupplierResult }) => (
+    <tr className="transition-colors"
+      style={{ borderBottom: "1px solid #f1f5f9", opacity: 0.55 }}
+      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"}
+      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+      <td className="py-2.5 px-4">
+        <div className="text-sm font-semibold" style={{ color: "#374151" }}>{s.supplier}</div>
+        <div className="text-xs font-mono mt-0.5" style={{ color: "#9ca3af" }}>{s.mpn}</div>
       </td>
-      <td className="py-3 px-4">
-        <span className="text-xs font-mono px-2 py-0.5 rounded whitespace-nowrap"
-          style={{ color: "#888", background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
+      <td className="py-2.5 px-4">
+        <span className="text-xs px-2 py-0.5 rounded font-medium"
+          style={{ color: "#374151", background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
           {s.region || "Global"}
         </span>
       </td>
-      <td className="py-3 px-4 text-center">
-        <StockBadge stock={s.stock} />
+      <td className="py-2.5 px-4 text-center"><StockBadge stock={0} /></td>
+      <td className="py-2.5 px-4 text-center">
+        <span className="text-sm font-medium" style={{ color: "#374151" }}>
+          {s.moq > 0 ? s.moq.toLocaleString() : "—"}
+        </span>
       </td>
-      <td className="py-3 px-4 text-center">
-        <span className="text-xs font-mono" style={{ color: "#444" }}>{s.moq > 0 ? s.moq : "—"}</span>
+      <td className="py-2.5 px-4 text-right">
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="text-base font-bold" style={{ color: "#6b7280" }}>${s.price?.toFixed(3)}</span>
+          <span className="text-xs" style={{ color: "#9ca3af" }}>per unit · USD</span>
+        </div>
       </td>
-      <td className="py-3 px-4 text-right">
-        {s.price != null ? (
-          <span className="text-sm font-mono font-bold text-white">
-            {s.price.toFixed(3)}
-            <span className="text-xs font-normal ml-1" style={{ color: "#444" }}>USD</span>
-          </span>
-        ) : (
-          <span className="text-xs font-mono italic" style={{ color: "#444" }}>On request</span>
-        )}
+      <td className="py-2.5 px-4 text-center">
+        <span className="text-sm" style={{ color: "#9ca3af" }}>{s.leadTime || "Contact supplier"}</span>
       </td>
-      <td className="py-3 px-4 text-center">
-        <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#888" }}>{s.leadTime || "—"}</span>
-      </td>
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-2 justify-end">
+      <td className="py-2.5 px-4 hidden lg:table-cell" />
+      <td className="py-2.5 px-4">
+        <div className="flex justify-end">
           {s.url && (
             <a href={s.url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
-              style={{ color: "#444", border: "1px solid #1a1a1a", background: "#050505" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#fff"; (e.currentTarget as HTMLElement).style.borderColor = "#333"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#444"; (e.currentTarget as HTMLElement).style.borderColor = "#1a1a1a"; }}>
-              <ExternalLink size={10} />
-              <span className="hidden sm:inline">View</span>
+              className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md transition-all"
+              style={{ color: "#374151", border: "1px solid #e5e7eb", background: "#fff" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#1a56db"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#374151"; }}>
+              <ExternalLink size={11} /> View
             </a>
-          )}
-          {s.hasPrice && s.stock > 0 && (
-            <button
-              onClick={() => generatePDF(s)}
-              className="flex items-center gap-1 text-xs font-mono font-bold px-2.5 py-1 rounded transition-all whitespace-nowrap"
-              style={isRecommended
-                ? { background: "#fff", color: "#000", border: "1px solid #fff" }
-                : { background: "#0a0a0a", color: "#888", border: "1px solid #222" }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.background = "#fff";
-                (e.currentTarget as HTMLElement).style.color = "#000";
-                (e.currentTarget as HTMLElement).style.borderColor = "#fff";
-              }}
-              onMouseLeave={e => {
-                if (!isRecommended) {
-                  (e.currentTarget as HTMLElement).style.background = "#0a0a0a";
-                  (e.currentTarget as HTMLElement).style.color = "#888";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#222";
-                }
-              }}>
-              <Download size={10} />
-              PO
-            </button>
           )}
         </div>
       </td>
     </tr>
   );
 
+  // Price-on-request row — no price data
+  const OnRequestRow = ({ s }: { s: SupplierResult }) => (
+    <tr className="transition-colors"
+      style={{ borderBottom: "1px solid #f1f5f9", opacity: 0.6 }}
+      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"}
+      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+      <td className="py-2.5 px-4">
+        <div className="text-sm font-semibold" style={{ color: "#374151" }}>{s.supplier}</div>
+        <div className="text-xs font-mono mt-0.5" style={{ color: "#9ca3af" }}>{s.mpn}</div>
+      </td>
+      <td className="py-2.5 px-4">
+        <span className="text-xs px-2 py-0.5 rounded font-medium"
+          style={{ color: "#374151", background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
+          {s.region || "Global"}
+        </span>
+      </td>
+      <td className="py-2.5 px-4 text-center"><StockBadge stock={s.stock} /></td>
+      <td className="py-2.5 px-4 text-center">
+        <span className="text-sm font-medium" style={{ color: "#374151" }}>
+          {s.moq > 0 ? s.moq.toLocaleString() : "—"}
+        </span>
+      </td>
+      <td className="py-2.5 px-4 text-right">
+        <span className="text-sm italic" style={{ color: "#9ca3af" }}>Price on request</span>
+      </td>
+      <td className="py-2.5 px-4 text-center">
+        <span className="text-sm" style={{ color: "#9ca3af" }}>{s.leadTime || "—"}</span>
+      </td>
+      <td className="py-2.5 px-4 hidden lg:table-cell" />
+      <td className="py-2.5 px-4">
+        <div className="flex justify-end">
+          {s.url && (
+            <a href={s.url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md transition-all"
+              style={{ color: "#374151", border: "1px solid #e5e7eb", background: "#fff" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#1a56db"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#374151"; }}>
+              <ExternalLink size={11} /> Contact
+            </a>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+
+  // ── Section divider ───────────────────────────────────────────────────────
+  const SectionDivider = ({ label, count }: { label: string; count: number }) => (
+    <tr>
+      <td colSpan={8} className="px-4 pt-4 pb-1.5">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px" style={{ background: "#e5e7eb" }} />
+          <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+            style={{ color: "#9ca3af" }}>
+            {label} · {count}
+          </span>
+          <div className="flex-1 h-px" style={{ background: "#e5e7eb" }} />
+        </div>
+      </td>
+    </tr>
+  );
+
   return (
-    <div className="min-h-screen" style={{ background: "#000", fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}>
+    <div className="min-h-screen" style={{ background: "#f8fafc", fontFamily: "'Inter', 'Helvetica Neue', sans-serif" }}>
 
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-6"
-        style={{ background: "#000", borderBottom: "1px solid #111" }}>
+        style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <div className="flex items-center gap-3">
-          <Link href="/"
-            className="flex items-center gap-1 mr-2 transition-opacity hover:opacity-50"
-            style={{ color: "#444" }}>
+          <Link href="/" className="flex items-center gap-1 mr-1 transition-opacity hover:opacity-60"
+            style={{ color: "#9ca3af" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
           </Link>
           <AtomLogo size={20} />
-          <span className="text-sm font-bold text-white tracking-tight">OmniProcure</span>
-          <span className="text-xs px-2 py-0.5 rounded font-mono hidden sm:inline"
-            style={{ color: "#444", background: "#0a0a0a", border: "1px solid #111" }}>
+          <span className="text-base font-bold tracking-tight" style={{ color: "#111827" }}>OmniProcure</span>
+          <span className="text-xs px-2 py-0.5 rounded font-medium hidden sm:inline"
+            style={{ color: "#1a56db", background: "#eff6ff", border: "1px solid #bfdbfe" }}>
             command center
           </span>
         </div>
-
         <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded font-mono"
-            style={{ background: "#0a0a0a", border: "1px solid #111" }}>
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-md"
+            style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
             <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50" style={{ background: "#fff" }} />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "#16a34a" }} />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: "#16a34a" }} />
             </span>
-            <span className="text-xs text-white">live</span>
+            <span className="text-xs font-medium" style={{ color: "#15803d" }}>live</span>
           </div>
-
           {cached && phase === "done" && (
-            <span className="hidden sm:inline text-xs font-mono px-2.5 py-1 rounded"
-              style={{ color: "#888", background: "#0a0a0a", border: "1px solid #111" }}>
+            <span className="hidden sm:inline text-xs font-medium px-2.5 py-1.5 rounded-md"
+              style={{ color: "#6b7280", background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
               ⚡ cached
             </span>
           )}
-
           <button onClick={() => setSettingsOpen(true)}
-            className="w-8 h-8 rounded flex items-center justify-center transition-all"
-            style={{ border: "1px solid #111", background: "#000", color: "#444" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#333"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#111"; (e.currentTarget as HTMLElement).style.color = "#444"; }}>
-            <Settings size={13} />
+            className="w-8 h-8 rounded-md flex items-center justify-center transition-all"
+            style={{ border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#1a56db"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#6b7280"; }}>
+            <Settings size={14} />
           </button>
         </div>
       </nav>
@@ -587,85 +638,84 @@ export default function OmniProcure() {
       <main className="pt-14 min-h-screen flex flex-col items-center px-4 pb-16">
 
         {/* Hero */}
-        <div className="mt-16 mb-10 text-center">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <Globe size={11} style={{ color: "#444" }} />
-            <span className="text-xs font-mono" style={{ color: "#444" }}>
+        <div className="mt-14 mb-8 text-center">
+          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1.5 rounded-full"
+            style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+            <Globe size={12} style={{ color: "#1a56db" }} />
+            <span className="text-xs font-medium" style={{ color: "#1a56db" }}>
               OEM Secrets · 140+ Distributors · Claude AI
             </span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white mb-3 font-mono">
-            Parts Sourcing
+          <h1 className="text-3xl font-bold tracking-tight mb-3" style={{ color: "#111827" }}>
+            Electronic Parts Sourcing
           </h1>
-          <p className="text-xs max-w-md mx-auto leading-relaxed font-mono" style={{ color: "#444" }}>
-            Enter any MPN → search 140+ global distributors → Claude picks the best → generate PO
+          <p className="text-sm max-w-md mx-auto leading-relaxed" style={{ color: "#6b7280" }}>
+            Enter any MPN → search 140+ global distributors → AI picks the best deal → generate PO
           </p>
         </div>
 
         {/* Search */}
-        <div className="w-full max-w-2xl relative mb-10">
-          <div className="flex items-center gap-3 px-4 py-3 transition-all rounded-lg"
+        <div className="w-full max-w-2xl relative mb-8">
+          <div className="flex items-center gap-3 px-4 py-3 transition-all rounded-xl"
             style={selectedPart
-              ? { background: "#0a0a0a", border: "1px solid #fff" }
-              : { background: "#0a0a0a", border: "1px solid #1a1a1a" }}>
+              ? { background: "#fff", border: "2px solid #1a56db", boxShadow: "0 0 0 3px rgba(26,86,219,0.08)" }
+              : { background: "#fff", border: "1.5px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             {selectedPart
-              ? <Lock size={13} style={{ color: "#fff" }} className="shrink-0" />
-              : <Search size={13} style={{ color: "#444" }} className="shrink-0" />}
+              ? <Lock size={15} style={{ color: "#1a56db" }} className="shrink-0" />
+              : <Search size={15} style={{ color: "#9ca3af" }} className="shrink-0" />}
             <input
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={!!selectedPart}
-              placeholder="STM32F103C8T6, MPU-6050, LM358DR2G…"
-              className="flex-1 bg-transparent text-white text-sm outline-none font-mono disabled:cursor-not-allowed placeholder-neutral-700"
+              placeholder="e.g. ATMEGA328P-PU, STM32F103C8T6, MPU-6050…"
+              className="flex-1 bg-transparent text-base outline-none disabled:cursor-not-allowed"
+              style={{ color: "#111827" }}
               autoComplete="off"
             />
             {selectedPart ? (
-              <button onClick={reset} style={{ color: "#444" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#fff"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#444"}>
-                <X size={13} />
+              <button onClick={reset} style={{ color: "#9ca3af" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#374151"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#9ca3af"}>
+                <X size={15} />
               </button>
             ) : query.trim() ? (
-              <button
-                onClick={() => runSearch(query.trim())}
-                className="text-xs font-mono font-bold px-3 py-1.5 rounded transition-all"
-                style={{ background: "#fff", color: "#000" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#e5e5e5"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#fff"}>
-                Search ↵
+              <button onClick={() => runSearch(query.trim())}
+                className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-all"
+                style={{ background: "#1a56db", color: "#fff" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#1e40af"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#1a56db"}>
+                Search
               </button>
             ) : null}
           </div>
 
-          {/* Suggestions */}
           {query.trim() && !selectedPart && suggestions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 overflow-hidden z-30 rounded-lg"
-              style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
+            <div className="absolute top-full left-0 right-0 mt-2 overflow-hidden z-30 rounded-xl shadow-lg"
+              style={{ background: "#fff", border: "1px solid #e5e7eb" }}>
               {suggestions.map((item, i) => (
                 <button key={i} onClick={() => runSearch(item.part)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
-                  style={{ borderBottom: "1px solid #0d0d0d" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#0a0a0a"}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                  style={{ borderBottom: "1px solid #f1f5f9" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
-                  <Package size={11} style={{ color: "#444" }} className="shrink-0" />
+                  <Package size={13} style={{ color: "#9ca3af" }} className="shrink-0" />
                   <div>
-                    <div className="text-xs font-mono font-bold text-white">{item.part}</div>
-                    <div className="text-xs font-mono mt-0.5" style={{ color: "#444" }}>{item.desc}</div>
+                    <div className="text-sm font-semibold" style={{ color: "#111827" }}>{item.part}</div>
+                    <div className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>{item.desc}</div>
                   </div>
-                  <ChevronRight size={11} style={{ color: "#444" }} className="ml-auto" />
+                  <ChevronRight size={13} style={{ color: "#d1d5db" }} className="ml-auto" />
                 </button>
               ))}
               <button onClick={() => runSearch(query.trim())}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#0a0a0a"}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
-                <Search size={11} style={{ color: "#fff" }} className="shrink-0" />
-                <span className="text-xs font-mono font-bold text-white">
+                <Search size={13} style={{ color: "#1a56db" }} className="shrink-0" />
+                <span className="text-sm font-semibold" style={{ color: "#1a56db" }}>
                   Search &quot;{query.trim().toUpperCase()}&quot;
                 </span>
-                <ChevronRight size={11} style={{ color: "#444" }} className="ml-auto" />
               </button>
             </div>
           )}
@@ -673,139 +723,191 @@ export default function OmniProcure() {
 
         {/* ── RESULTS ── */}
         {hasResults && (
-          <div className="w-full max-w-6xl space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-3">
-                {isLoading && (
-                  <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "#444" }}>
-                    <Loader2 size={11} className="animate-spin text-white" />
-                    querying 140+ distributors…
-                  </div>
-                )}
-                {phase === "done" && (
-                  <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: "#888" }}>
-                    <CheckCircle size={11} className="text-white" />
-                    {found.length} suppliers · {actionable.length} actionable
-                    {cached && cachedAt && (
-                      <span style={{ color: "#444" }}>· cached {new Date(cachedAt).toLocaleDateString()}</span>
+          <div className="w-full max-w-7xl space-y-3">
+
+            {/* Status bar */}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-sm" style={{ color: "#6b7280" }}>
+                {isLoading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" style={{ color: "#1a56db" }} />
+                    Querying 140+ distributors…
+                    {found.length > 0 && (
+                      <span style={{ color: "#9ca3af" }}>({found.length} so far)</span>
                     )}
-                  </div>
-                )}
+                  </>
+                ) : phase === "done" ? (
+                  <>
+                    <CheckCircle size={14} style={{ color: "#16a34a" }} />
+                    <span>
+                      <strong style={{ color: "#111827" }}>{found.length}</strong> total suppliers
+                      {" · "}
+                      <strong style={{ color: "#111827" }}>{totalActionable}</strong> with price &amp; stock
+                      {outOfStock.length > 0 && (
+                        <span style={{ color: "#9ca3af" }}> · {outOfStock.length} out of stock</span>
+                      )}
+                      {onRequest.length > 0 && (
+                        <span style={{ color: "#9ca3af" }}> · {onRequest.length} price on request</span>
+                      )}
+                      {cached && cachedAt && (
+                        <span style={{ color: "#9ca3af" }}> · cached {new Date(cachedAt).toLocaleDateString()}</span>
+                      )}
+                    </span>
+                  </>
+                ) : null}
               </div>
-              <div className="text-xs font-mono font-bold text-white">{currentMpn}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold font-mono" style={{ color: "#111827" }}>{currentMpn}</span>
+                <button onClick={reset}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-all"
+                  style={{ color: "#6b7280", border: "1px solid #e5e7eb", background: "#fff" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#111827"; (e.currentTarget as HTMLElement).style.borderColor = "#9ca3af"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#6b7280"; (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; }}>
+                  ← New search
+                </button>
+              </div>
             </div>
 
-            {recommendation && actionable.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg"
-                style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
-                <Star size={11} className="text-white fill-white shrink-0" />
-                <p className="text-xs font-mono" style={{ color: "#888" }}>
-                  <span className="text-white font-bold">ai pick: {recommendation.winner}</span>
-                  {" — "}{recommendation.reason}
-                </p>
+            {/* AI Recommendation Banner */}
+            {recommendation && totalActionable > 0 && (
+              <div className="rounded-xl p-4"
+                style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe" }}>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
+                    style={{ background: "#1a56db" }}>
+                    <BadgeCheck size={14} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-bold" style={{ color: "#1e3a8a" }}>
+                        AI Recommendation: {recommendation.winner}
+                      </span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: "#1a56db", color: "#fff" }}>Best pick</span>
+                    </div>
+                    <p className="text-sm leading-relaxed" style={{ color: "#1d4ed8" }}>
+                      <strong>Why this supplier won:</strong> {recommendation.reason}
+                    </p>
+                    <p className="text-xs mt-1.5" style={{ color: "#60a5fa" }}>
+                      Scored on: stock availability (40%) · unit price (35%) · lead time &amp; reliability (25%)
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
+            {/* Loading skeleton */}
             {isLoading && found.length === 0 && (
-              <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #111" }}>
-                <div className="px-4 py-2.5 flex items-center gap-2"
-                  style={{ borderBottom: "1px solid #111", background: "#050505" }}>
-                  <Loader2 size={11} className="animate-spin text-white" />
-                  <span className="text-xs font-mono" style={{ color: "#444" }}>querying oem secrets api...</span>
+              <div className="rounded-xl overflow-hidden bg-white shadow-sm"
+                style={{ border: "1px solid #e5e7eb" }}>
+                <div className="px-4 py-3 flex items-center gap-2"
+                  style={{ borderBottom: "1px solid #f1f5f9", background: "#f8fafc" }}>
+                  <Loader2 size={13} className="animate-spin" style={{ color: "#1a56db" }} />
+                  <span className="text-sm" style={{ color: "#6b7280" }}>Querying OEM Secrets API across 140+ distributors…</span>
                 </div>
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-6 px-4 py-3.5 animate-pulse"
-                    style={{ borderBottom: "1px solid #0a0a0a" }}>
-                    <div className="h-2 w-36 rounded" style={{ background: "#111" }} />
-                    <div className="h-2 w-14 rounded" style={{ background: "#0d0d0d" }} />
-                    <div className="h-2 w-14 rounded ml-auto" style={{ background: "#111" }} />
-                    <div className="h-2 w-20 rounded" style={{ background: "#0d0d0d" }} />
-                    <div className="h-2 w-10 rounded" style={{ background: "#111" }} />
+                  <div key={i} className="flex items-center gap-6 px-4 py-4 animate-pulse"
+                    style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <div className="h-3 w-40 rounded-md" style={{ background: "#e5e7eb" }} />
+                    <div className="h-3 w-16 rounded-md" style={{ background: "#f1f5f9" }} />
+                    <div className="h-5 w-16 rounded-md ml-auto" style={{ background: "#e5e7eb" }} />
+                    <div className="h-3 w-24 rounded-md" style={{ background: "#f1f5f9" }} />
+                    <div className="h-3 w-12 rounded-md" style={{ background: "#e5e7eb" }} />
                   </div>
                 ))}
               </div>
             )}
 
+            {/* Main results table — ALL rows rendered, no cap */}
             {found.length > 0 && (
-              <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #111" }}>
+              <div className="rounded-xl overflow-hidden bg-white shadow-sm"
+                style={{ border: "1px solid #e5e7eb" }}>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr style={{ background: "#050505", borderBottom: "1px solid #111" }}>
-                        {[
-                          { key: null,        label: "Distributor", align: "left"   },
-                          { key: null,        label: "Region",      align: "left"   },
-                          { key: "stock",     label: "Stock",       align: "center" },
-                          { key: null,        label: "MOQ",         align: "center" },
-                          { key: "price",     label: "Unit Price",  align: "right"  },
-                          { key: "leadtime",  label: "Lead Time",   align: "center" },
-                          { key: null,        label: "Actions",     align: "right"  },
-                        ].map(({ key, label, align }) => (
-                          <th key={label}
+                      <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e5e7eb" }}>
+                        {([
+                          { key: null,       label: "Distributor",  align: "left"   },
+                          { key: null,       label: "Region",       align: "left"   },
+                          { key: "stock",    label: "Stock",        align: "center" },
+                          { key: null,       label: "MOQ",          align: "center" },
+                          { key: "price",    label: "Unit Price",   align: "right"  },
+                          { key: "leadtime", label: "Lead Time",    align: "center" },
+                          { key: null,       label: "",             align: "center" },
+                          { key: null,       label: "Actions",      align: "right"  },
+                        ] as { key: SortKey | null; label: string; align: string }[]).map(({ key, label, align }) => (
+                          <th key={label + (key ?? "")}
                             className={`px-4 py-2.5 text-${align} ${key ? "cursor-pointer select-none" : ""}`}
-                            onClick={key ? () => handleSort(key as SortKey) : undefined}>
-                            <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : align === "center" ? "justify-center" : ""}`}>
-                              <span className="text-xs font-mono font-bold tracking-widest uppercase"
-                                style={{ color: key && sortKey === key ? "#fff" : "#444" }}>
+                            onClick={key ? () => handleSort(key) : undefined}>
+                            <div className={`flex items-center gap-1.5 ${align === "right" ? "justify-end" : align === "center" ? "justify-center" : ""}`}>
+                              <span className="text-xs font-semibold tracking-wide uppercase"
+                                style={{ color: key && sortKey === key ? "#1a56db" : "#6b7280" }}>
                                 {label}
                               </span>
-                              {key && <SortIcon column={key as SortKey} sortKey={sortKey} sortDir={sortDir} />}
+                              {key && <SortIcon column={key} sortKey={sortKey} sortDir={sortDir} />}
                             </div>
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {actionable.map((s, i) => (
-                        <TableRow
-                          key={`${s.supplier}-${i}`}
+
+                      {/* ── Section 1: Price + stock ── */}
+                      {withPriceInStock.map((s, i) => (
+                        <ActionableRow
+                          key={`in-${s.supplier}-${i}`}
                           s={s}
                           isRecommended={!!(recommendation && found.indexOf(s) === recommendation.recommendedIndex)}
                         />
                       ))}
 
-                      {passive.length > 0 && (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-2">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1 h-px" style={{ background: "#0d0d0d" }} />
-                              <span className="text-xs font-mono whitespace-nowrap" style={{ color: "#fff" }}>
-                                out of stock / price on request
-                              </span>
-                              <div className="flex-1 h-px" style={{ background: "#0d0d0d" }} />
-                            </div>
-                          </td>
-                        </tr>
+                      {/* ── Section 2: Out of stock (priced) ── */}
+                      {outOfStock.length > 0 && (
+                        <>
+                          <SectionDivider label="Out of stock — priced" count={outOfStock.length} />
+                          {outOfStock.map((s, i) => (
+                            <OutOfStockRow key={`oos-${s.supplier}-${i}`} s={s} />
+                          ))}
+                        </>
                       )}
 
-                      {passive.map((s, i) => (
-                        <TableRow
-                          key={`passive-${s.supplier}-${i}`}
-                          s={s}
-                          isRecommended={false}
-                          dim={false}
-                        />
-                      ))}
+                      {/* ── Section 3: Price on request ── */}
+                      {onRequest.length > 0 && (
+                        <>
+                          <SectionDivider label="Price on request — contact supplier" count={onRequest.length} />
+                          {onRequest.map((s, i) => (
+                            <OnRequestRow key={`req-${s.supplier}-${i}`} s={s} />
+                          ))}
+                        </>
+                      )}
+
                     </tbody>
                   </table>
                 </div>
 
-                <div className="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2"
-                  style={{ borderTop: "1px solid #0d0d0d", background: "#050505" }}>
-                  <span className="text-xs font-mono" style={{ color: "#444" }}>
-                    {found.length} results · oem secrets · 1 api call
-                  </span>
+                {/* Table footer */}
+                <div className="px-4 py-3 flex items-center justify-between flex-wrap gap-2"
+                  style={{ borderTop: "1px solid #f1f5f9", background: "#f8fafc" }}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xs" style={{ color: "#9ca3af" }}>
+                      {found.length} of {found.length} suppliers shown · OEM Secrets API · no results hidden
+                    </span>
+                    <span className="hidden sm:inline-flex items-center gap-1 text-xs" style={{ color: "#d1d5db" }}>
+                      <ShieldAlert size={10} />
+                      Always verify stock &amp; pricing before submitting a PO
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono mr-1" style={{ color: "#444" }}>sort:</span>
+                    <span className="text-xs font-medium mr-1" style={{ color: "#6b7280" }}>Sort:</span>
                     {(["ai","price","stock","leadtime"] as SortKey[]).map(opt => (
                       <button key={opt} onClick={() => handleSort(opt)}
-                        className="text-xs px-2 py-0.5 rounded font-mono transition-all"
+                        className="text-xs px-2.5 py-1 rounded-md font-medium transition-all"
                         style={sortKey === opt
-                          ? { background: "#fff", color: "#000", border: "1px solid #fff" }
-                          : { background: "transparent", color: "#444", border: "1px solid #111" }}
-                        onMouseEnter={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#444"; (e.currentTarget as HTMLElement).style.color = "#888"; }}}
-                        onMouseLeave={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#111"; (e.currentTarget as HTMLElement).style.color = "#444"; }}}>
-                        {opt === "ai" ? "★ ai" : opt}
+                          ? { background: "#1a56db", color: "#fff", border: "1px solid #1a56db" }
+                          : { background: "#fff", color: "#6b7280", border: "1px solid #e5e7eb" }}
+                        onMouseEnter={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#1a56db"; }}}
+                        onMouseLeave={e => { if (sortKey !== opt) { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#6b7280"; }}}>
+                        {opt === "ai" ? "★ AI" : opt.charAt(0).toUpperCase() + opt.slice(1)}
                       </button>
                     ))}
                   </div>
@@ -813,66 +915,54 @@ export default function OmniProcure() {
               </div>
             )}
 
+            {/* Error states */}
             {phase === "error" && (
-              <div className="px-4 py-4 flex items-start gap-3 rounded-lg"
-                style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
-                <AlertCircle size={13} style={{ color: "#888" }} className="shrink-0 mt-0.5" />
+              <div className="px-5 py-4 flex items-start gap-3 rounded-xl bg-white shadow-sm"
+                style={{ border: "1px solid #fecaca" }}>
+                <AlertCircle size={15} style={{ color: "#dc2626" }} className="shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-xs font-mono font-bold text-white mb-1">search failed</div>
-                  <div className="text-xs font-mono" style={{ color: "#444" }}>check your connection and try again.</div>
+                  <div className="text-sm font-semibold mb-0.5" style={{ color: "#111827" }}>Search failed</div>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>Check your connection and try again.</div>
                 </div>
               </div>
             )}
 
             {phase === "done" && found.length === 0 && (
-              <div className="px-4 py-4 flex items-start gap-3 rounded-lg"
-                style={{ background: "#050505", border: "1px solid #1a1a1a" }}>
-                <AlertCircle size={13} style={{ color: "#888" }} className="shrink-0 mt-0.5" />
+              <div className="px-5 py-4 flex items-start gap-3 rounded-xl bg-white shadow-sm"
+                style={{ border: "1px solid #e5e7eb" }}>
+                <AlertCircle size={15} style={{ color: "#9ca3af" }} className="shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-xs font-mono font-bold text-white mb-1">no results for {currentMpn}</div>
-                  <div className="text-xs font-mono" style={{ color: "#444" }}>verify the mpn and try again.</div>
+                  <div className="text-sm font-semibold mb-0.5" style={{ color: "#111827" }}>No results for {currentMpn}</div>
+                  <div className="text-sm" style={{ color: "#6b7280" }}>Verify the MPN and try again. Check for alternate part numbers or manufacturer variants.</div>
                 </div>
               </div>
             )}
-
-            <button onClick={reset}
-              className="w-full text-center text-xs font-mono py-2 transition-colors"
-              style={{ color: "#444" }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#888"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#444"}>
-              ← search a different part
-            </button>
           </div>
         )}
 
         {/* ── IDLE ── */}
         {!hasResults && (
-          <div className="mt-2 w-full max-w-4xl space-y-3">
-
-            {/* Distributor network card */}
-            <div className="p-5 rounded-lg" style={{ background: "#050505", border: "1px solid #111" }}>
+          <div className="mt-2 w-full max-w-4xl space-y-4">
+            <div className="p-5 rounded-xl bg-white shadow-sm" style={{ border: "1px solid #e5e7eb" }}>
               <div className="flex items-center gap-2 mb-4">
-                <Globe size={12} style={{ color: "#fff" }} />
-                <span className="text-xs font-mono font-bold text-white">140+ Global Distributor Network via OEM Secrets</span>
+                <Globe size={14} style={{ color: "#1a56db" }} />
+                <span className="text-sm font-semibold" style={{ color: "#111827" }}>
+                  140+ Global Distributor Network via OEM Secrets
+                </span>
               </div>
-
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {DISTRIBUTOR_NETWORK.map((group) => (
                   <div key={group.region}>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs">{group.flag}</span>
-                      <span className="text-xs font-mono font-bold tracking-widest uppercase"
-                        style={{ color: "#444" }}>
-                        {group.region}
-                      </span>
-                      <div className="flex-1 h-px ml-1" style={{ background: "#111" }} />
+                      <span className="text-sm">{group.flag}</span>
+                      <span className="text-xs font-semibold tracking-widest uppercase"
+                        style={{ color: "#6b7280" }}>{group.region}</span>
+                      <div className="flex-1 h-px ml-1" style={{ background: "#e5e7eb" }} />
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {group.distributors.map((d) => (
-                        <span
-                          key={d}
-                          className="text-xs font-mono px-2 py-0.5 rounded"
-                          style={{ color: "#888", background: "#0a0a0a", border: "1px solid #161616" }}>
+                        <span key={d} className="text-xs font-medium px-2 py-0.5 rounded-md"
+                          style={{ color: "#374151", background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
                           {d}
                         </span>
                       ))}
@@ -880,42 +970,31 @@ export default function OmniProcure() {
                   </div>
                 ))}
               </div>
-
-              <p className="text-xs font-mono mt-5 pt-4 leading-relaxed"
-                style={{ color: "#333", borderTop: "1px solid #0d0d0d" }}>
-                + 60 additional regional &amp; specialty distributors queried simultaneously · prices often in real-time
+              <p className="text-xs mt-4 pt-3" style={{ color: "#9ca3af", borderTop: "1px solid #f1f5f9" }}>
+                + 60 additional regional &amp; specialty distributors queried simultaneously
               </p>
             </div>
 
-            {/* API badge */}
-            <div className="px-4 py-3 rounded-lg flex items-center gap-3"
-              style={{ background: "#050505", border: "1px solid #111" }}>
-              <Zap size={11} style={{ color: "#fff" }} className="shrink-0" />
-              <p className="text-xs font-mono" style={{ color: "#444" }}>
-                <span className="text-white">OEM Secrets API</span>
-                {" "}— 1 search = 140+ distributors = 1 api call. repeated searches return{" "}
-                <span className="text-white">instantly</span>.
+            <div className="px-4 py-3 rounded-xl bg-white shadow-sm flex items-center gap-3"
+              style={{ border: "1px solid #e5e7eb" }}>
+              <Zap size={13} style={{ color: "#1a56db" }} className="shrink-0" />
+              <p className="text-sm" style={{ color: "#374151" }}>
+                <span className="font-semibold" style={{ color: "#111827" }}>OEM Secrets API</span>
+                {" "}— 1 search = 140+ distributors = 1 API call.{" "}
+                <span className="font-semibold">All results shown, no cap.</span>
               </p>
             </div>
 
-            {/* Try these parts */}
             <div>
-              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#444" }}>
-                Try these parts
-              </p>
+              <p className="text-xs font-semibold tracking-widest uppercase mb-2.5 px-1"
+                style={{ color: "#9ca3af" }}>Try these parts</p>
               <div className="flex flex-wrap gap-2">
                 {FALLBACK_CATALOG.map((item, i) => (
                   <button key={i} onClick={() => runSearch(item.part)}
-                    className="text-xs font-mono px-3 py-1.5 rounded transition-all"
-                    style={{ background: "#050505", border: "1px solid #111", color: "#444" }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.borderColor = "#fff";
-                      (e.currentTarget as HTMLElement).style.color = "#fff";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.borderColor = "#111";
-                      (e.currentTarget as HTMLElement).style.color = "#444";
-                    }}>
+                    className="text-sm font-medium px-3 py-1.5 rounded-lg transition-all bg-white shadow-sm"
+                    style={{ border: "1px solid #e5e7eb", color: "#374151" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1a56db"; (e.currentTarget as HTMLElement).style.color = "#1a56db"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#374151"; }}>
                     {item.part}
                   </button>
                 ))}
@@ -925,50 +1004,49 @@ export default function OmniProcure() {
         )}
       </main>
 
-      {/* Settings */}
+      {/* Settings panel */}
       {settingsOpen && (
         <>
-          <div className="fixed inset-0 z-40" style={{ background: "rgba(0,0,0,0.85)" }}
+          <div className="fixed inset-0 z-40" style={{ background: "rgba(0,0,0,0.4)" }}
             onClick={() => setSettingsOpen(false)} />
-          <div className="fixed top-0 right-0 h-full w-72 z-50 flex flex-col"
-            style={{ background: "#000", borderLeft: "1px solid #111" }}>
+          <div className="fixed top-0 right-0 h-full w-80 z-50 flex flex-col shadow-2xl"
+            style={{ background: "#fff", borderLeft: "1px solid #e5e7eb" }}>
             <div className="flex items-center justify-between px-5 py-4"
-              style={{ borderBottom: "1px solid #111" }}>
+              style={{ borderBottom: "1px solid #e5e7eb" }}>
               <div className="flex items-center gap-2">
-                <Settings size={12} className="text-white" />
-                <span className="text-xs font-mono font-bold text-white">settings</span>
+                <Settings size={14} style={{ color: "#374151" }} />
+                <span className="text-sm font-semibold" style={{ color: "#111827" }}>Settings</span>
               </div>
               <button onClick={() => setSettingsOpen(false)}
-                style={{ color: "#444" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#fff"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#444"}>
-                <X size={13} />
+                style={{ color: "#9ca3af" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#374151"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#9ca3af"}>
+                <X size={15} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
-              <p className="text-xs font-mono font-bold tracking-widest uppercase mb-4" style={{ color: "#444" }}>
-                Integrations
-              </p>
+              <p className="text-xs font-semibold tracking-widest uppercase mb-4"
+                style={{ color: "#9ca3af" }}>Integrations</p>
               {SETTINGS_TOGGLES.map((t, i) => (
                 <div key={i} className="flex items-center justify-between py-3.5"
-                  style={{ borderBottom: "1px solid #0d0d0d" }}>
+                  style={{ borderBottom: "1px solid #f1f5f9" }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded flex items-center justify-center"
-                      style={{ background: "#0a0a0a", border: "1px solid #111" }}>
-                      <t.icon size={11} style={{ color: "#444" }} />
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                      style={{ background: "#f3f4f6", border: "1px solid #e5e7eb" }}>
+                      <t.icon size={12} style={{ color: "#6b7280" }} />
                     </div>
                     <div>
-                      <div className="text-xs font-mono font-bold text-white">{t.label}</div>
-                      <div className="text-xs font-mono mt-0.5" style={{ color: "#444" }}>{t.sub}</div>
+                      <div className="text-sm font-medium" style={{ color: "#111827" }}>{t.label}</div>
+                      <div className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>{t.sub}</div>
                     </div>
                   </div>
                   <Toggle enabled={t.enabled} />
                 </div>
               ))}
             </div>
-            <div className="px-5 py-4" style={{ borderTop: "1px solid #0d0d0d" }}>
-              <p className="text-xs font-mono text-center" style={{ color: "#444" }}>
-                omniprocure v4.0.0 · oem secrets api
+            <div className="px-5 py-4" style={{ borderTop: "1px solid #f1f5f9" }}>
+              <p className="text-xs text-center" style={{ color: "#9ca3af" }}>
+                OmniProcure v4.0.0 · OEM Secrets API
               </p>
             </div>
           </div>
