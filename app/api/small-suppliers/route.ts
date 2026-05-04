@@ -52,6 +52,21 @@ export interface SupplierResult {
   hasPrice: boolean;
 }
 
+// Results for one variant MPN
+export interface VariantResult {
+  variantMpn: string;
+  packageDesc: string; // e.g. "SMD / TQFP-32"
+  suppliers: SupplierResult[];
+}
+
+export interface EquivalentIC {
+  mpn: string;
+  manufacturer: string;
+  description: string;
+  whyEquivalent: string; // plain-English explanation
+  suppliers: SupplierResult[]; // fetched after Claude suggests it
+}
+
 interface ClaudeRanking {
   winner: string;
   reason: string;
@@ -61,21 +76,42 @@ interface ClaudeRanking {
 interface CacheRow {
   results: SupplierResult[];
   claude_recommendation: ClaudeRanking | null;
+  variant_results: VariantResult[];
+  equivalent_ics: EquivalentIC[];
   updated_at: string;
   hit_count: number;
 }
 
-// ── Currency fallback order ───────────────────────────────────────────────────
-const CURRENCY_FALLBACK = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CNY"];
+// ── Package suffix map ────────────────────────────────────────────────────────
+// Maps suffix → human-readable package description.
+// Used both to generate candidate variants and to label them in the UI.
+const PACKAGE_SUFFIXES: Record<string, string> = {
+  // AVR / ATmega style
+  "PU":   "DIP (Through-hole)",
+  "AU":   "TQFP-32 (SMD)",
+  "MU":   "QFN-32 (SMD)",
+  "ANR":  "TQFP-32 (SMD, T&R)",
+  "MMH":  "QFN-32 (SMD, lead-free)",
+  // STM32 style
+  "T6":   "LQFP-48",
+  "T7":   "LQFP-64",
+  "C8T6": "LQFP-48",
+  "RBT6": "LQFP-64",
+  // Generic
+  "N":    "DIP (Through-hole)",
+  "D":    "SOIC-8 (SMD)",
+  "P":    "DIP-8 (Through-hole)",
+  "W":    "WSON (SMD)",
+  "TR":   "Tape & Reel",
+  "T":    "Tape & Reel",
+  "R":    "Tape & Reel",
+};
 
+// ── Currency helpers ──────────────────────────────────────────────────────────
+const CURRENCY_FALLBACK = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CNY"];
 const TO_USD: Record<string, number> = {
-  USD: 1,
-  EUR: 1.09,
-  GBP: 1.27,
-  CAD: 0.74,
-  AUD: 0.65,
-  JPY: 0.0067,
-  CNY: 0.14,
+  USD: 1, EUR: 1.09, GBP: 1.27, CAD: 0.74,
+  AUD: 0.65, JPY: 0.0067, CNY: 0.14,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,13 +119,10 @@ function normalizeMpn(mpn: string): string {
   return mpn.toUpperCase().replace(/[\s\-_.]/g, "");
 }
 
-// Normalize a distributor name for dedup keying.
-// Strips punctuation, extra spaces, common suffixes so
-// "Arrow Electronics, Inc." and "Arrow Electronics" collapse to the same key.
 function normalizeSupplierName(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")          // strip punctuation
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\b(inc|llc|ltd|corp|co|gmbh|bv|ag|srl|pty|plc)\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -113,11 +146,7 @@ function extractPrice(
   prices: Record<string, Array<{ unit_break: string; unit_price: string }>>,
   sourceCurrency: string
 ): { price: number | null; currency: string } {
-  const candidates = [
-    ...CURRENCY_FALLBACK,
-    sourceCurrency?.toUpperCase(),
-  ].filter(Boolean);
-
+  const candidates = [...CURRENCY_FALLBACK, sourceCurrency?.toUpperCase()].filter(Boolean);
   for (const cur of candidates) {
     const list = prices?.[cur];
     if (!list || list.length === 0) continue;
@@ -133,17 +162,9 @@ function mapToSupplierResult(item: OemSecretsStock, mpn: string): SupplierResult
   const { price, currency } = extractPrice(item.prices, item.source_currency);
   const hasPrice = price !== null;
   const stock = item.quantity_in_stock ?? 0;
-
-  // Prefer common name; fall back to raw name
-  const supplier =
-    (item.distributor.distributor_common_name || item.distributor.distributor_name || "").trim();
-
+  const supplier = (item.distributor.distributor_common_name || item.distributor.distributor_name || "").trim();
   return {
-    supplier,
-    mpn,
-    price,
-    currency,
-    stock,
+    supplier, mpn, price, currency, stock,
     leadTime: item.lead_time || (stock > 0 ? "In stock" : "Contact supplier"),
     url: item.buy_now_url || "",
     moq: item.moq ?? 1,
@@ -155,29 +176,15 @@ function mapToSupplierResult(item: OemSecretsStock, mpn: string): SupplierResult
   };
 }
 
-// ── Dedup ─────────────────────────────────────────────────────────────────────
-// Groups by normalized name. Within each group keeps the single best row:
-//   1. Highest score tier (price+stock > price-only > stock-only > nothing)
-//   2. Within same tier: highest stock
-//   3. Within same tier+stock: lowest price
-// This means a common part like ATMEGA328P can return 80+ unique distributors
-// instead of being collapsed down to 20 by an arbitrary slice.
 function deduplicateBySupplier(results: SupplierResult[]): SupplierResult[] {
   const map = new Map<string, SupplierResult>();
-
   for (const curr of results) {
     const key = normalizeSupplierName(curr.supplier);
-    if (!key) continue; // skip rows with no supplier name
-
+    if (!key) continue;
     const existing = map.get(key);
-    if (!existing) {
-      map.set(key, curr);
-      continue;
-    }
-
+    if (!existing) { map.set(key, curr); continue; }
     const existingScore = getScore(existing);
     const currScore = getScore(curr);
-
     if (currScore > existingScore) {
       map.set(key, curr);
     } else if (currScore === existingScore) {
@@ -188,66 +195,108 @@ function deduplicateBySupplier(results: SupplierResult[]): SupplierResult[] {
       }
     }
   }
-
   return Array.from(map.values());
 }
 
-// ── OEM Secrets API ───────────────────────────────────────────────────────────
+// ── OEM Secrets fetch (shared) ────────────────────────────────────────────────
 async function fetchOemSecrets(mpn: string): Promise<SupplierResult[]> {
   const apiKey = process.env.OEM_SECRETS_API_KEY!;
   const url = `https://oemsecretsapi.com/partsearch?apiKey=${apiKey}&searchTerm=${encodeURIComponent(mpn)}&currency=USD`;
 
   console.log(`[OemSecrets] Fetching: ${mpn}`);
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-
-  if (!res.ok) {
-    console.log(`[OemSecrets] HTTP ${res.status}`);
-    throw new Error(`OEM Secrets API error: ${res.status}`);
-  }
+  const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
+  if (!res.ok) throw new Error(`OEM Secrets API error: ${res.status}`);
 
   const data: OemSecretsResponse = await res.json();
-  console.log(`[OemSecrets] Raw response: ${data.parts_returned} rows from API`);
-
+  console.log(`[OemSecrets] ${mpn}: ${data.parts_returned} rows`);
   if (!data.stock || data.stock.length === 0) return [];
 
-  // 1. Log raw distributor names to help diagnose dedup collisions
-  const rawNames = data.stock.map(
-    item => item.distributor.distributor_common_name || item.distributor.distributor_name
-  );
-  console.log(`[OemSecrets] Raw distributors (${rawNames.length}): ${[...new Set(rawNames)].join(", ")}`);
-
-  // 2. Map all rows → SupplierResult
   const mapped = data.stock.map(item => mapToSupplierResult(item, mpn));
-
-  // 3. Deduplicate — one row per logical distributor
   const deduped = deduplicateBySupplier(mapped);
-  console.log(`[OemSecrets] After dedup: ${deduped.length} unique distributors`);
-
-  // 4. Sort: score desc → price asc within same tier
-  const sorted = deduped.sort((a, b) => {
+  return deduped.sort((a, b) => {
     const scoreDiff = getScore(b) - getScore(a);
     if (scoreDiff !== 0) return scoreDiff;
     if (a.price !== null && b.price !== null) return a.price - b.price;
     return 0;
   });
-
-  // ── NO SLICE — return every unique distributor the API gives us ──
-  console.log(`[OemSecrets] Returning all ${sorted.length} unique suppliers`);
-  return sorted;
 }
 
-// ── Claude: rank results ──────────────────────────────────────────────────────
+// ── SKU Variant generation ────────────────────────────────────────────────────
+// Parses the input MPN to find its base + current suffix, then generates
+// candidate variants using the other suffixes in the map.
+// Avoids returning the original MPN as a variant.
+function generateVariantMpns(mpn: string): Array<{ variantMpn: string; packageDesc: string }> {
+  const upper = mpn.toUpperCase();
+  const variants: Array<{ variantMpn: string; packageDesc: string }> = [];
+
+  // Sort suffixes longest-first so "ANR" matches before "AU", etc.
+  const sortedSuffixes = Object.keys(PACKAGE_SUFFIXES).sort((a, b) => b.length - a.length);
+
+  // Find which suffix the input ends with (if any)
+  let base = upper;
+  let foundCurrentSuffix = false;
+
+  for (const suffix of sortedSuffixes) {
+    if (upper.endsWith(suffix) && upper.length > suffix.length) {
+      base = upper.slice(0, upper.length - suffix.length);
+      foundCurrentSuffix = true;
+      break;
+    }
+  }
+
+  // If we couldn't identify a known suffix, the part itself is the base.
+  // Still try appending common suffixes.
+  for (const suffix of sortedSuffixes) {
+    const candidate = `${base}${suffix}`;
+    if (candidate === upper) continue; // skip self
+    // Basic sanity: don't generate absurdly long MPNs
+    if (candidate.length > 24) continue;
+    variants.push({ variantMpn: candidate, packageDesc: PACKAGE_SUFFIXES[suffix] });
+  }
+
+  // Deduplicate by variantMpn
+  const seen = new Set<string>();
+  return variants.filter(v => {
+    if (seen.has(v.variantMpn)) return false;
+    seen.add(v.variantMpn);
+    return true;
+  });
+}
+
+// Fetch variants in parallel, cap at 6 candidates to avoid blowing the budget.
+// Only include a variant in results if OEM Secrets actually returns stock for it.
+async function fetchVariants(mpn: string): Promise<VariantResult[]> {
+  const candidates = generateVariantMpns(mpn).slice(0, 6);
+  if (candidates.length === 0) return [];
+
+  console.log(`[Variants] Checking ${candidates.length} candidates for ${mpn}`);
+
+  const settled = await Promise.allSettled(
+    candidates.map(async ({ variantMpn, packageDesc }) => {
+      const suppliers = await fetchOemSecrets(variantMpn);
+      return { variantMpn, packageDesc, suppliers };
+    })
+  );
+
+  const results: VariantResult[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled" && r.value.suppliers.length > 0) {
+      results.push(r.value);
+      console.log(`[Variants] ${r.value.variantMpn}: ${r.value.suppliers.length} suppliers`);
+    }
+  }
+
+  return results;
+}
+
+// ── Claude: rank + equivalent ICs (two separate calls, run in parallel) ───────
+
 async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise<ClaudeRanking> {
   const fallback = (): ClaudeRanking => {
     const actionable = suppliers.filter(s => s.hasPrice && s.stock > 0);
     const pool = actionable.length > 0 ? actionable : suppliers.filter(s => s.hasPrice);
-    if (pool.length === 0) {
-      return { winner: suppliers[0].supplier, reason: "Only available option.", recommendedIndex: 0 };
-    }
-    const best = pool.reduce(
-      (bi, s, i) => ((s.price ?? 9999) < (pool[bi].price ?? 9999) ? i : bi),
-      0
-    );
+    if (pool.length === 0) return { winner: suppliers[0].supplier, reason: "Only available option.", recommendedIndex: 0 };
+    const best = pool.reduce((bi, s, i) => ((s.price ?? 9999) < (pool[bi].price ?? 9999) ? i : bi), 0);
     const idx = suppliers.findIndex(s => s.supplier === pool[best].supplier);
     return {
       winner: suppliers[idx].supplier,
@@ -260,54 +309,38 @@ async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise
   const actionable = suppliers.filter(s => s.hasPrice && s.stock > 0);
   if (!apiKey || actionable.length <= 1) return fallback();
 
-  // Cap the list sent to Claude at top 30 actionable to keep the prompt tight
-  // (Claude doesn't need all 80+ rows to pick the best — just the competitive ones)
   const topActionable = actionable.slice(0, 30);
-  console.log(`[Rank] Sending ${topActionable.length} actionable suppliers to Claude`);
+  console.log(`[Rank] Sending ${topActionable.length} suppliers to Claude`);
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 200,
-        messages: [
-          {
-            role: "user",
-            content:
-              `You are a procurement expert. Pick the single best supplier for "${mpn}".\n` +
-              `Scoring weights: stock availability 40%, unit price 35%, lead time & reliability 25%.\n` +
-              `Only consider suppliers where hasPrice=true and stock>0.\n\n` +
-              JSON.stringify(
-                topActionable.map(s => ({
-                  index: suppliers.findIndex(x => x.supplier === s.supplier),
-                  supplier: s.supplier,
-                  price: s.price,
-                  stock: s.stock,
-                  moq: s.moq,
-                  leadTime: s.leadTime,
-                  region: s.region,
-                }))
-              ) +
-              `\n\nRespond ONLY with raw JSON (no markdown, no code fences):\n` +
-              `{"winner":"<supplier name>","recommendedIndex":<index in original array>,"reason":"<max 120 chars plain English, explain why this supplier beats the others>"}`,
-          },
-        ],
+        messages: [{
+          role: "user",
+          content:
+            `You are a procurement expert. Pick the single best supplier for "${mpn}".\n` +
+            `Scoring: stock availability 40%, unit price 35%, lead time & reliability 25%.\n` +
+            `Only consider suppliers where hasPrice=true and stock>0.\n\n` +
+            JSON.stringify(topActionable.map(s => ({
+              index: suppliers.findIndex(x => x.supplier === s.supplier),
+              supplier: s.supplier, price: s.price, stock: s.stock,
+              moq: s.moq, leadTime: s.leadTime, region: s.region,
+            }))) +
+            `\n\nRespond ONLY with raw JSON (no markdown):\n` +
+            `{"winner":"<name>","recommendedIndex":<n>,"reason":"<max 120 chars>"}`,
+        }],
       }),
       signal: AbortSignal.timeout(10_000),
     });
-
     if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
     const d = await res.json();
     const text: string = d?.content?.[0]?.text ?? "";
-    console.log(`[Rank] Claude response: ${text}`);
     const m = text.match(/\{[\s\S]*?\}/);
-    if (!m) throw new Error("No JSON in response");
+    if (!m) throw new Error("No JSON");
     const p = JSON.parse(m[0]);
     return {
       winner: p.winner ?? suppliers[0].supplier,
@@ -315,9 +348,81 @@ async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise
       recommendedIndex: typeof p.recommendedIndex === "number" ? p.recommendedIndex : 0,
     };
   } catch (err: any) {
-    console.log(`[Rank] Claude fallback triggered: ${err?.message}`);
+    console.log(`[Rank] Fallback: ${err?.message}`);
     return fallback();
   }
+}
+
+// Ask Claude to suggest 3 functionally equivalent ICs.
+// Returns structured suggestions; we then fetch live stock for each.
+async function suggestEquivalentICs(
+  mpn: string
+): Promise<Array<{ mpn: string; manufacturer: string; description: string; whyEquivalent: string }>> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return [];
+
+  console.log(`[EquivICs] Asking Claude for equivalents of ${mpn}`);
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 600,
+        messages: [{
+          role: "user",
+          content:
+            `You are an electronics engineer. Suggest exactly 3 functionally equivalent ICs to "${mpn}".\n` +
+            `Rules:\n` +
+            `- Must be from a DIFFERENT manufacturer\n` +
+            `- Must be functionally equivalent (same purpose, compatible pinout or drop-in replacement)\n` +
+            `- Must be real, currently manufactured parts that are commonly available\n` +
+            `- Prefer parts that are popular and widely stocked\n\n` +
+            `Respond ONLY with raw JSON array (no markdown, no explanation outside JSON):\n` +
+            `[{"mpn":"<exact MPN>","manufacturer":"<name>","description":"<10 words max>","whyEquivalent":"<max 100 chars, plain English, explain key specs match>"}]`,
+        }],
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
+    const d = await res.json();
+    const text: string = d?.content?.[0]?.text ?? "";
+    console.log(`[EquivICs] Claude response: ${text}`);
+    // Extract JSON array from response
+    const m = text.match(/\[[\s\S]*\]/);
+    if (!m) throw new Error("No JSON array");
+    const parsed = JSON.parse(m[0]);
+    if (!Array.isArray(parsed)) throw new Error("Not an array");
+    return parsed.slice(0, 3).map((item: any) => ({
+      mpn: String(item.mpn ?? "").trim(),
+      manufacturer: String(item.manufacturer ?? "").trim(),
+      description: String(item.description ?? "").trim(),
+      whyEquivalent: String(item.whyEquivalent ?? "").trim(),
+    })).filter(item => item.mpn.length > 0);
+  } catch (err: any) {
+    console.log(`[EquivICs] Failed: ${err?.message}`);
+    return [];
+  }
+}
+
+// Fetch stock for each suggested equivalent IC in parallel
+async function fetchEquivalentICs(mpn: string): Promise<EquivalentIC[]> {
+  const suggestions = await suggestEquivalentICs(mpn);
+  if (suggestions.length === 0) return [];
+
+  console.log(`[EquivICs] Fetching stock for ${suggestions.length} equivalents`);
+
+  const settled = await Promise.allSettled(
+    suggestions.map(async (s) => {
+      const suppliers = await fetchOemSecrets(s.mpn);
+      return { ...s, suppliers };
+    })
+  );
+
+  return settled
+    .filter((r): r is PromiseFulfilledResult<EquivalentIC> => r.status === "fulfilled")
+    .map(r => r.value);
 }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -326,24 +431,21 @@ const CACHE_TTL_HOURS = 24;
 async function checkCache(mpnNormalized: string): Promise<CacheRow | null> {
   try {
     const { data } = await supabase
-      .from("search_cache")
-      .select("*")
-      .eq("mpn_normalized", mpnNormalized)
-      .single();
+      .from("search_cache").select("*").eq("mpn_normalized", mpnNormalized).single();
     if (!data) return null;
     const ageHours = (Date.now() - new Date(data.updated_at).getTime()) / 3_600_000;
     const fresh = ageHours < CACHE_TTL_HOURS;
-    console.log(`[Cache] ${fresh ? "Hit" : "Stale"}: ${mpnNormalized} (${ageHours.toFixed(1)}h old)`);
+    console.log(`[Cache] ${fresh ? "Hit" : "Stale"}: ${mpnNormalized} (${ageHours.toFixed(1)}h)`);
     return fresh ? (data as CacheRow) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function saveCache(
   mpnNormalized: string,
   results: SupplierResult[],
-  recommendation: ClaudeRanking | null
+  recommendation: ClaudeRanking | null,
+  variantResults: VariantResult[],
+  equivalentIcs: EquivalentIC[]
 ) {
   try {
     await supabase.from("search_cache").upsert(
@@ -351,12 +453,14 @@ async function saveCache(
         mpn_normalized: mpnNormalized,
         results,
         claude_recommendation: recommendation,
+        variant_results: variantResults,
+        equivalent_ics: equivalentIcs,
         updated_at: new Date().toISOString(),
         hit_count: 1,
       },
       { onConflict: "mpn_normalized" }
     );
-    console.log(`[Cache] Saved ${mpnNormalized} (${results.length} results)`);
+    console.log(`[Cache] Saved ${mpnNormalized} (${results.length} results, ${variantResults.length} variants, ${equivalentIcs.length} equiv)`);
   } catch (err: any) {
     console.log(`[Cache] Save failed: ${err?.message}`);
   }
@@ -364,10 +468,7 @@ async function saveCache(
 
 async function bumpHitCount(mpnNormalized: string, current: number) {
   try {
-    await supabase
-      .from("search_cache")
-      .update({ hit_count: current + 1 })
-      .eq("mpn_normalized", mpnNormalized);
+    await supabase.from("search_cache").update({ hit_count: current + 1 }).eq("mpn_normalized", mpnNormalized);
   } catch {}
 }
 
@@ -388,11 +489,8 @@ export async function POST(req: NextRequest) {
 
       const send = (type: string, data: unknown) => {
         if (closed) return;
-        try {
-          controller.enqueue(new TextEncoder().encode(sseEvent(type, data)));
-        } catch {
-          closed = true;
-        }
+        try { controller.enqueue(new TextEncoder().encode(sseEvent(type, data))); }
+        catch { closed = true; }
       };
 
       const close = () => {
@@ -406,70 +504,68 @@ export async function POST(req: NextRequest) {
         const cached = await checkCache(mpnNormalized);
         if (cached) {
           send("started", { message: "Cache hit — serving instantly", cached: true });
-          const results: SupplierResult[] = cached.results ?? [];
-          for (const r of results) {
+          for (const r of (cached.results ?? [])) {
             send("supplier_found", { supplier: r });
-            await new Promise(resolve => setTimeout(resolve, 20));
+            await new Promise(r => setTimeout(r, 15));
           }
+          send("variant_results",   { variants: cached.variant_results ?? [] });
+          send("equivalent_ics",    { equivalents: cached.equivalent_ics ?? [] });
           send("complete", {
-            mpn,
-            suppliers: results,
+            mpn, suppliers: cached.results ?? [],
             recommendation: cached.claude_recommendation,
-            totalFound: results.length,
-            cached: true,
-            cachedAt: cached.updated_at,
+            totalFound: (cached.results ?? []).length,
+            cached: true, cachedAt: cached.updated_at,
           });
           bumpHitCount(mpnNormalized, cached.hit_count ?? 1);
           close();
           return;
         }
 
-        // ── 2. Fetch from OEM Secrets ───────────────────────────────────
-        send("started", { message: `Fetching suppliers for ${mpn}`, cached: false });
-        send("supplier_searching", {
-          name: "OEM Secrets",
-          message: "Querying 140+ global distributors...",
-        });
+        // ── 2. Fan out: main search + variants + equivalents in parallel ─
+        send("started", { message: `Searching for ${mpn}`, cached: false });
+        send("supplier_searching", { name: "OEM Secrets", message: "Querying 140+ distributors + SKU variants + equivalent ICs in parallel…" });
 
-        const results = await fetchOemSecrets(mpn);
+        // All three network operations run at the same time
+        const [mainResults, variantResults, equivalentIcs] = await Promise.all([
+          fetchOemSecrets(mpn),
+          fetchVariants(mpn),
+          fetchEquivalentICs(mpn),
+        ]);
 
-        if (results.length === 0) {
-          send("complete", {
-            mpn,
-            suppliers: [],
-            recommendation: null,
-            totalFound: 0,
-            cached: false,
-          });
+        if (mainResults.length === 0) {
+          send("variant_results", { variants: variantResults });
+          send("equivalent_ics",  { equivalents: equivalentIcs });
+          send("complete", { mpn, suppliers: [], recommendation: null, totalFound: 0, cached: false });
           close();
           return;
         }
 
-        // ── 3. Stream results one by one ────────────────────────────────
-        for (const r of results) {
+        // ── 3. Stream main results ──────────────────────────────────────
+        for (const r of mainResults) {
           send("supplier_found", { supplier: r });
-          await new Promise(resolve => setTimeout(resolve, 20));
+          await new Promise(r => setTimeout(r, 15));
         }
 
-        // ── 4. Claude ranking ───────────────────────────────────────────
+        // ── 4. Claude ranking (runs after main fetch, variants/equiv already done) ──
         let recommendation: ClaudeRanking | null = null;
-        const actionable = results.filter(s => s.hasPrice && s.stock > 0);
+        const actionable = mainResults.filter(s => s.hasPrice && s.stock > 0);
         if (actionable.length >= 1) {
-          recommendation = await rankWithClaude(mpn, results);
+          recommendation = await rankWithClaude(mpn, mainResults);
         }
 
-        // ── 5. Save cache + complete ────────────────────────────────────
-        saveCache(mpnNormalized, results, recommendation);
+        // ── 5. Send variant + equivalent results ────────────────────────
+        send("variant_results",  { variants: variantResults });
+        send("equivalent_ics",   { equivalents: equivalentIcs });
+
+        // ── 6. Cache + complete ─────────────────────────────────────────
+        saveCache(mpnNormalized, mainResults, recommendation, variantResults, equivalentIcs);
         send("complete", {
-          mpn,
-          suppliers: results,
-          recommendation,
-          totalFound: results.length,
-          cached: false,
+          mpn, suppliers: mainResults, recommendation,
+          totalFound: mainResults.length, cached: false,
         });
 
       } catch (err: any) {
-        console.log(`[OmniProcure] Fatal error: ${err?.message}`);
+        console.log(`[OmniProcure] Fatal: ${err?.message}`);
         send("error", { message: err?.message ?? "Unknown error" });
       } finally {
         close();
