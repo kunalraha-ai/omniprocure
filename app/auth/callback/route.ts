@@ -21,13 +21,33 @@ export async function GET() {
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
     const supabase = createClient('${supabaseUrl}', '${supabaseAnonKey}');
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
 
     async function finish() {
-      const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
-      if (error || !data?.session) {
+      const accessToken = hash.get('access_token') || search.get('access_token');
+      const refreshToken = hash.get('refresh_token') || search.get('refresh_token');
+      const errorDescription = hash.get('error_description') || search.get('error_description');
+
+      if (errorDescription) {
         window.location.href = '/auth/login';
         return;
       }
+
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        if (error) {
+          window.location.href = '/auth/login';
+          return;
+        }
+      }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        window.location.href = '/auth/login';
+        return;
+      }
+
       window.location.href = '/dashboard';
     }
 
