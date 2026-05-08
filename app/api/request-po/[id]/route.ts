@@ -19,8 +19,8 @@ import {
 export const maxDuration = 45;
 
 // ── GET: status ───────────────────────────────────────────────────────────────
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     const { data, error } = await supabaseAdmin
       .from("hitl_queue").select("*").eq("id", id).single();
@@ -32,8 +32,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 // ── PATCH: decide ─────────────────────────────────────────────────────────────
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const body = await req.json();
   const decision: "approved" | "rejected" | "modified" = body?.decision;
   const note: string | undefined = body?.note;

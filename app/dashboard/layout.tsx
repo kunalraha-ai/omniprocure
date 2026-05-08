@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import "./glacier.css";
 
 const NAV_ITEMS = [
   { label: "Overview",  href: "/dashboard",          icon: "dashboard" },
