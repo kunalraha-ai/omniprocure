@@ -154,9 +154,9 @@ export default function DashboardPage() {
         />
         <StatsCard
           label="API Calls Today"
-          value={`${stats.apiCalls}/100`}
+          value={stats.apiCalls}
           icon={<Zap className="w-5 h-5 text-purple-500" />}
-          subtitle="Daily limit"
+          subtitle="Calls this session"
         />
       </div>
 

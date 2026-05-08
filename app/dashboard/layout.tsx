@@ -1,110 +1,140 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import "./glacier.css";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "BOM Upload", href: "/dashboard/bom" },
-  { label: "Monitor", href: "/dashboard/monitor" },
-  { label: "Orders", href: "/dashboard/orders" },
-  { label: "Alerts", href: "/dashboard/alerts" },
-  { label: "Settings", href: "/dashboard/settings" },
+const NAV_ITEMS = [
+  { label: "Overview",  href: "/dashboard",          icon: "dashboard" },
+  { label: "BOM Upload", href: "/dashboard/bom",     icon: "document_scanner" },
+  { label: "Monitor",   href: "/dashboard/monitor",  icon: "satellite_alt" },
+  { label: "Orders",    href: "/dashboard/orders",   icon: "shopping_cart" },
+  { label: "Alerts",    href: "/dashboard/alerts",   icon: "notifications_active" },
+  { label: "Settings",  href: "/dashboard/settings", icon: "settings" },
 ];
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
-);
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [darkMode, setDarkMode] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
+  // Poll HITL queue for pending count
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("omniprocure-theme");
-    const initial =
-      savedTheme === "dark" ||
-      (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setDarkMode(initial);
+    const fetchPending = async () => {
+      try {
+        const res = await fetch("/api/request-po?pending=true");
+        const data = await res.json();
+        setPendingCount(data.count ?? 0);
+      } catch {}
+    };
+    fetchPending();
+    const iv = setInterval(fetchPending, 30_000);
+    return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => {
-    const element = document.documentElement;
-    element.classList.toggle("dark", darkMode);
-    window.localStorage.setItem("omniprocure-theme", darkMode ? "dark" : "light");
-  }, [darkMode]);
-
-  const handleLogout = async () => {
-    setSigningOut(true);
-    await supabase.auth.signOut();
-    router.push("/auth/login");
-  };
-
   return (
-    <div className={darkMode ? "min-h-screen bg-slate-950 text-slate-100" : "min-h-screen bg-slate-50 text-slate-950"}>
-      <div className="mx-auto flex min-h-screen max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <aside className="flex w-full max-w-[280px] flex-col rounded-3xl border border-slate-200 bg-white px-4 py-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="mb-10 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">OmniProcure</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">Dashboard</div>
+    <div className="min-h-screen bg-background text-on-surface font-body flex overflow-x-hidden"
+      style={{ fontFamily: "'Inter', sans-serif", backgroundColor: "#0a0e1a", color: "#e0e8f0" }}>
+
+      {/* Ambient background glows */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="ambient-glow-primary" style={{ top: "-10%", left: "-5%" }} />
+        <div className="ambient-glow-tertiary" style={{ bottom: "-20%", right: "-10%" }} />
+      </div>
+
+      {/* Sidebar */}
+      <aside className="hidden md:flex flex-col w-60 min-h-screen glass-panel z-20 fixed left-0 top-0"
+        style={{ borderRight: "1px solid rgba(125,211,252,0.1)" }}>
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-5 py-5 border-b"
+          style={{ borderColor: "rgba(125,211,252,0.1)" }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: "rgba(125,211,252,0.15)", border: "1px solid rgba(125,211,252,0.3)" }}>
+            <span className="material-symbols-outlined text-primary text-lg"
+              style={{ fontVariationSettings: "'FILL' 1", color: "#7dd3fc" }}>hexagon</span>
+          </div>
+          <div>
+            <div className="text-sm font-bold tracking-tight" style={{ color: "#e0e8f0" }}>OmniProcure</div>
+            <div className="text-xs" style={{ color: "#a0b4c4" }}>AI Procurement</div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex flex-col gap-1 px-3 py-4 flex-1">
+          {NAV_ITEMS.map(item => {
+            const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            return (
+              <Link key={item.href} href={item.href}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative"
+                style={{
+                  background: active ? "rgba(125,211,252,0.1)" : "transparent",
+                  borderLeft: active ? "2px solid #7dd3fc" : "2px solid transparent",
+                  color: active ? "#7dd3fc" : "#a0b4c4",
+                }}>
+                <span className="material-symbols-outlined text-lg transition-colors"
+                  style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0", fontSize: "20px" }}>
+                  {item.icon}
+                </span>
+                <span className="text-sm font-medium">{item.label}</span>
+                {item.label === "Orders" && pendingCount > 0 && (
+                  <span className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "rgba(200,160,240,0.2)", color: "#c8a0f0", border: "1px solid rgba(200,160,240,0.3)" }}>
+                    {pendingCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t" style={{ borderColor: "rgba(125,211,252,0.1)" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#7dd3fc" }} />
+            <span className="text-xs" style={{ color: "#a0b4c4" }}>All systems operational</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 flex flex-col md:ml-60 min-h-screen relative z-10">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 flex items-center justify-between px-8 py-3 glass-panel"
+          style={{ borderBottom: "1px solid rgba(125,211,252,0.1)" }}>
+          <div className="flex items-center gap-3">
+            {/* Mobile logo */}
+            <span className="md:hidden text-base font-bold" style={{ color: "#e0e8f0" }}>OmniProcure</span>
+            {/* Page breadcrumb */}
+            <div className="hidden md:flex items-center gap-2 text-sm" style={{ color: "#a0b4c4" }}>
+              {NAV_ITEMS.find(i => i.href !== "/dashboard" && pathname.startsWith(i.href))?.label ?? "Overview"}
             </div>
           </div>
-
-          <nav className="space-y-2">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={
-                    "block rounded-2xl px-4 py-3 text-sm font-medium transition " +
-                    (isActive
-                      ? "bg-slate-950 text-white shadow-sm dark:bg-slate-700"
-                      : "text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white")
-                  }
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold">Theme</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Switch between light and dark UI.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDarkMode(!darkMode)}
-                className="rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              >
-                {darkMode ? "Dark" : "Light"}
-              </button>
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="glass-input hidden md:flex items-center gap-2 rounded-full px-4 py-2 w-52">
+              <span className="material-symbols-outlined text-sm" style={{ color: "#a0b4c4", fontSize: "18px" }}>search</span>
+              <input className="bg-transparent text-sm outline-none w-full placeholder:text-on-surface-variant"
+                placeholder="Search..."
+                style={{ color: "#e0e8f0" }} />
             </div>
-          </div>
-
-          <div className="mt-auto pt-6">
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={signingOut}
-              className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900"
-            >
-              {signingOut ? "Signing out..." : "Logout"}
+            {/* Notifications */}
+            <button className="relative w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+              style={{ background: "rgba(15,21,36,0.6)", border: "1px solid rgba(125,211,252,0.1)" }}>
+              <span className="material-symbols-outlined text-lg" style={{ color: "#a0b4c4", fontSize: "20px" }}>notifications</span>
+              {pendingCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "#ff6b6b" }} />
+              )}
             </button>
+            {/* Avatar */}
+            <div className="w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(26,36,56,0.8)", border: "1px solid rgba(125,211,252,0.2)" }}>
+              <span className="material-symbols-outlined" style={{ color: "#a0b4c4", fontSize: "18px" }}>person</span>
+            </div>
           </div>
-        </aside>
+        </header>
 
-        <main className="flex min-w-0 flex-1 flex-col rounded-3xl bg-white p-6 shadow-sm dark:bg-slate-950 dark:text-slate-100">
+        {/* Page content */}
+        <main className="flex-1 p-6 md:p-8">
           {children}
         </main>
       </div>

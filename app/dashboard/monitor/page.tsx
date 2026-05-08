@@ -118,99 +118,93 @@ export default function DashboardMonitorPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Monitor Components</h1>
-          <p className="text-muted-foreground">
-            Track pricing, stock, and lead time for your monitored parts.
-          </p>
+      <div className="glass-panel-elevated rounded-[2rem] border-slate-700/70 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-on-surface">Monitor Components</h1>
+            <p className="mt-2 max-w-2xl text-sm text-on-surface-variant">
+              Track pricing, stock, and lead time for your monitored parts with real-time alerts.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            className="glass-button-secondary inline-flex items-center gap-2 rounded-3xl px-4 py-2 text-sm font-semibold"
+            onClick={fetchParts}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchParts}
-          disabled={isLoading}
-          className="self-start sm:self-auto gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
       </div>
 
-      {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="glass-panel rounded-3xl border-slate-700/60">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                <Eye className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Parts</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {isLoading ? '—' : parts.length}
-                </p>
+                <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Total Parts</p>
+                <p className="mt-2 text-2xl font-semibold text-on-surface">{isLoading ? '—' : parts.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-panel rounded-3xl border-slate-700/60">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
-                <Package className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100/20 text-emerald-300">
+                <Package className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {isLoading ? '—' : activeCount}
-                </p>
+                <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Active</p>
+                <p className="mt-2 text-2xl font-semibold text-on-surface">{isLoading ? '—' : activeCount}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-panel rounded-3xl border-slate-700/60">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-muted rounded-lg">
-                <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-800/70 text-on-surface-variant">
+                <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Inactive</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {isLoading ? '—' : inactiveCount}
-                </p>
+                <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Inactive</p>
+                <p className="mt-2 text-2xl font-semibold text-on-surface">{isLoading ? '—' : inactiveCount}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Search ── */}
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
+          <Search className="w-4 h-4" />
+        </span>
         <Input
           placeholder="Search by MPN or part name…"
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          className="pl-9"
+          className="glass-input pl-10"
           disabled={isLoading}
         />
       </div>
 
       {/* ── Main Card ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Monitored Parts</CardTitle>
+      <Card className="glass-panel-elevated rounded-3xl border-slate-700/70 overflow-hidden">
+        <CardHeader className="border-b border-slate-700/75 pb-3 px-6 py-4">
+          <CardTitle className="text-base font-semibold text-on-surface">Monitored Parts</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
 
           {/* Loading */}
           {isLoading && (
-            <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+            <div className="flex items-center justify-center gap-3 py-16 text-on-surface-variant">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span className="text-sm">Loading monitored parts…</span>
             </div>
@@ -220,9 +214,9 @@ export default function DashboardMonitorPage() {
           {fetchState === 'error' && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-center">
               <AlertTriangle className="w-8 h-8 text-destructive" />
-              <p className="font-medium text-foreground">Failed to load parts</p>
-              <p className="text-sm text-muted-foreground">{errorMessage}</p>
-              <Button variant="outline" size="sm" onClick={fetchParts}>
+              <p className="font-medium text-on-surface">Failed to load parts</p>
+              <p className="text-sm text-on-surface-variant">{errorMessage}</p>
+              <Button variant="outline" size="sm" className="glass-button-secondary rounded-3xl" onClick={fetchParts}>
                 Try again
               </Button>
             </div>
@@ -231,16 +225,12 @@ export default function DashboardMonitorPage() {
           {/* Empty state */}
           {fetchState === 'success' && parts.length === 0 && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-center">
-              <div className="p-3 bg-muted rounded-full">
-                <Package className="w-6 h-6 text-muted-foreground" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/70">
+                <Package className="w-6 h-6 text-on-surface-variant" />
               </div>
-              <p className="font-medium text-foreground">
-                No components being monitored yet.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Upload a BOM to get started.
-              </p>
-              <Button asChild size="sm" className="mt-1 gap-2">
+              <p className="font-medium text-on-surface">No components being monitored yet.</p>
+              <p className="text-sm text-on-surface-variant">Upload a BOM to get started.</p>
+              <Button asChild size="sm" className="glass-button-secondary rounded-3xl px-4 py-2 gap-2 mt-1">
                 <Link href="/dashboard/bom">
                   <Upload className="w-4 h-4" />
                   Upload a BOM
@@ -254,7 +244,7 @@ export default function DashboardMonitorPage() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-slate-950/80">
                     <TableHead>MPN</TableHead>
                     <TableHead>Part Name</TableHead>
                     <TableHead>Quantity</TableHead>
@@ -266,7 +256,7 @@ export default function DashboardMonitorPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
+                      <TableCell colSpan={6} className="text-center py-10 text-on-surface-variant text-sm">
                         No parts match "{searchTerm}"
                       </TableCell>
                     </TableRow>
@@ -276,9 +266,9 @@ export default function DashboardMonitorPage() {
                         <TableCell className="font-mono text-sm font-medium">
                           {part.mpn}
                         </TableCell>
-                        <TableCell className="text-foreground">{part.part_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{part.quantity}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
+                        <TableCell className="text-on-surface">{part.part_name}</TableCell>
+                        <TableCell className="text-on-surface-variant">{part.quantity}</TableCell>
+                        <TableCell className="text-on-surface-variant text-sm">
                           {new Date(part.created_at).toLocaleDateString(undefined, {
                             year: 'numeric', month: 'short', day: 'numeric'
                           })}
@@ -306,9 +296,9 @@ export default function DashboardMonitorPage() {
                               {togglingId === part.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : part.is_active ? (
-                                <ToggleRight className="w-4 h-4 text-green-500" />
+                                <ToggleRight className="w-4 h-4 text-emerald-400" />
                               ) : (
-                                <ToggleLeft className="w-4 h-4 text-muted-foreground" />
+                                <ToggleLeft className="w-4 h-4 text-on-surface-variant" />
                               )}
                             </Button>
 

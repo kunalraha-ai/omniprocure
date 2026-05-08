@@ -61,7 +61,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
     pending: 'Pending', approved: 'Approved', rejected: 'Rejected', sent: 'Sent',
   }
   return (
-    <Badge className={`gap-1 ${styles[status] ?? 'bg-muted text-muted-foreground'}`}>
+    <Badge className={`gap-1 ${styles[status] ?? 'bg-slate-900/60 text-on-surface-variant'}`}>
       {icons[status]}
       {labels[status] ?? status}
     </Badge>
@@ -76,14 +76,14 @@ function OrderRow({ order }: { order: Order }) {
   return (
     <>
       <TableRow className="group">
-        <TableCell className="font-mono text-sm font-medium">{order.mpn}</TableCell>
-        <TableCell className="text-foreground">{order.part_name}</TableCell>
-        <TableCell className="text-muted-foreground">{order.supplier}</TableCell>
-        <TableCell className="text-muted-foreground">{order.quantity.toLocaleString()}</TableCell>
-        <TableCell>${Number(order.unit_price).toFixed(4)}</TableCell>
-        <TableCell className="font-medium">${Number(order.total_price).toFixed(2)}</TableCell>
+        <TableCell className="font-mono text-sm font-medium text-on-surface">{order.mpn}</TableCell>
+        <TableCell className="text-on-surface">{order.part_name}</TableCell>
+        <TableCell className="text-on-surface-variant">{order.supplier}</TableCell>
+        <TableCell className="text-on-surface-variant">{order.quantity.toLocaleString()}</TableCell>
+        <TableCell className="text-on-surface-variant">${Number(order.unit_price).toFixed(4)}</TableCell>
+        <TableCell className="font-medium text-on-surface">${Number(order.total_price).toFixed(2)}</TableCell>
         <TableCell><StatusBadge status={order.status} /></TableCell>
-        <TableCell className="text-muted-foreground text-sm">
+        <TableCell className="text-on-surface-variant text-sm">
           {new Date(order.created_at).toLocaleDateString(undefined, {
             year: 'numeric', month: 'short', day: 'numeric'
           })}
@@ -105,26 +105,26 @@ function OrderRow({ order }: { order: Order }) {
       </TableRow>
 
       {expanded && (
-        <TableRow className="bg-muted/40 hover:bg-muted/40">
+        <TableRow className="bg-slate-950/50 hover:bg-slate-950/70">
           <TableCell colSpan={9} className="py-4 px-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Order ID</p>
-                <p className="font-mono text-foreground">{order.id}</p>
+                <p className="text-xs font-medium text-on-surface-variant mb-0.5">Order ID</p>
+                <p className="font-mono text-on-surface">{order.id}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Part Name</p>
-                <p className="text-foreground">{order.part_name}</p>
+                <p className="text-xs font-medium text-on-surface-variant mb-0.5">Part Name</p>
+                <p className="text-on-surface">{order.part_name}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Quantity × Unit Price</p>
-                <p className="text-foreground">
+                <p className="text-xs font-medium text-on-surface-variant mb-0.5">Quantity × Unit Price</p>
+                <p className="text-on-surface">
                   {order.quantity.toLocaleString()} × ${Number(order.unit_price).toFixed(4)}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Created</p>
-                <p className="text-foreground">
+                <p className="text-xs font-medium text-on-surface-variant mb-0.5">Created</p>
+                <p className="text-on-surface">
                   {new Date(order.created_at).toLocaleString(undefined, {
                     dateStyle: 'medium', timeStyle: 'short'
                   })}
@@ -193,8 +193,8 @@ export default function DashboardOrdersPage() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Orders</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold text-on-surface">Orders</h1>
+          <p className="text-on-surface-variant">
             Track purchase orders, approvals, and fulfillment status.
           </p>
         </div>
@@ -203,7 +203,7 @@ export default function DashboardOrdersPage() {
           size="sm"
           onClick={fetchOrders}
           disabled={isLoading}
-          className="self-start sm:self-auto gap-2"
+          className="self-start sm:self-auto gap-2 glass-button-secondary rounded-3xl"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
@@ -212,15 +212,15 @@ export default function DashboardOrdersPage() {
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="glass-panel-elevated rounded-3xl border-slate-700/70">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                <ShoppingCart className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950/70">
+                <ShoppingCart className="w-4 h-4 text-on-surface" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Orders</p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-xs font-medium text-on-surface-variant">Total Orders</p>
+                <p className="text-2xl font-bold text-on-surface">
                   {isLoading ? '—' : orders.length}
                 </p>
               </div>
@@ -228,15 +228,15 @@ export default function DashboardOrdersPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-panel-elevated rounded-3xl border-slate-700/70">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
-                <Clock className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950/70">
+                <Clock className="w-4 h-4 text-on-surface" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Pending Approval</p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-xs font-medium text-on-surface-variant">Pending Approval</p>
+                <p className="text-2xl font-bold text-on-surface">
                   {isLoading ? '—' : pendingCount}
                 </p>
               </div>
@@ -244,15 +244,15 @@ export default function DashboardOrdersPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-panel-elevated rounded-3xl border-slate-700/70">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
-                <Package className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950/70">
+                <Package className="w-4 h-4 text-on-surface" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Sent</p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-xs font-medium text-on-surface-variant">Sent</p>
+                <p className="text-2xl font-bold text-on-surface">
                   {isLoading ? '—' : sentCount}
                 </p>
               </div>
@@ -260,15 +260,15 @@ export default function DashboardOrdersPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-panel-elevated rounded-3xl border-slate-700/70">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
-                <DollarSign className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950/70">
+                <DollarSign className="w-4 h-4 text-on-surface" />
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Value</p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-xs font-medium text-on-surface-variant">Total Value</p>
+                <p className="text-2xl font-bold text-on-surface">
                   {isLoading ? '—' : `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </p>
               </div>
@@ -280,7 +280,7 @@ export default function DashboardOrdersPage() {
       {/* ── Filter Tabs + Search ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Tabs */}
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
           {STATUS_TABS.map(tab => {
             const count = tabCount(tab.value)
             const isActive = activeTab === tab.value
@@ -290,18 +290,18 @@ export default function DashboardOrdersPage() {
                 onClick={() => setActiveTab(tab.value)}
                 disabled={isLoading}
                 className={`
-                  inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium
+                  inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium
                   transition-colors border
                   ${isActive
-                    ? 'bg-foreground text-background border-foreground'
-                    : 'bg-transparent text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
+                    ? 'bg-slate-900/80 text-on-surface border-slate-700/80'
+                    : 'bg-white/5 text-on-surface-variant border-slate-700/50 hover:text-on-surface hover:border-slate-500/60'
                   }
                 `}
               >
                 {tab.label}
                 <span className={`
                   text-xs px-1.5 py-0.5 rounded-full font-mono
-                  ${isActive ? 'bg-background/20' : 'bg-muted'}
+                  ${isActive ? 'bg-slate-950/70' : 'bg-slate-800/50'}
                 `}>
                   {isLoading ? '—' : count}
                 </span>
@@ -312,27 +312,27 @@ export default function DashboardOrdersPage() {
 
         {/* Search */}
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none" />
           <Input
             placeholder="Search MPN or supplier…"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-9 rounded-3xl glass-input"
             disabled={isLoading}
           />
         </div>
       </div>
 
       {/* ── Table Card ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Purchase Orders</CardTitle>
+      <Card className="glass-panel-elevated rounded-3xl border-slate-700/70 overflow-hidden">
+        <CardHeader className="border-b border-slate-700/75 pb-3 px-6 py-4">
+          <CardTitle className="text-base font-semibold text-on-surface">Purchase Orders</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
 
           {/* Loading */}
           {isLoading && (
-            <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+            <div className="flex items-center justify-center gap-3 py-16 text-on-surface-variant">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span className="text-sm">Loading orders…</span>
             </div>
@@ -342,20 +342,20 @@ export default function DashboardOrdersPage() {
           {fetchState === 'error' && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-center">
               <AlertTriangle className="w-8 h-8 text-destructive" />
-              <p className="font-medium text-foreground">Failed to load orders</p>
-              <p className="text-sm text-muted-foreground">{errorMessage}</p>
-              <Button variant="outline" size="sm" onClick={fetchOrders}>Try again</Button>
+              <p className="font-medium text-on-surface">Failed to load orders</p>
+              <p className="text-sm text-on-surface-variant">{errorMessage}</p>
+              <Button variant="outline" size="sm" className="glass-button-secondary rounded-3xl" onClick={fetchOrders}>Try again</Button>
             </div>
           )}
 
           {/* Empty */}
           {fetchState === 'success' && orders.length === 0 && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-center">
-              <div className="p-3 bg-muted rounded-full">
-                <ShoppingCart className="w-6 h-6 text-muted-foreground" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/70">
+                <ShoppingCart className="w-6 h-6 text-on-surface-variant" />
               </div>
-              <p className="font-medium text-foreground">No orders yet.</p>
-              <p className="text-sm text-muted-foreground max-w-sm">
+              <p className="font-medium text-on-surface">No orders yet.</p>
+              <p className="text-sm text-on-surface-variant max-w-sm">
                 Upload a BOM and approve a quote to generate your first PO.
               </p>
             </div>
@@ -366,7 +366,7 @@ export default function DashboardOrdersPage() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-slate-950/80">
                     <TableHead>MPN</TableHead>
                     <TableHead>Part Name</TableHead>
                     <TableHead>Supplier</TableHead>
@@ -381,7 +381,7 @@ export default function DashboardOrdersPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-sm">
+                      <TableCell colSpan={9} className="text-center py-10 text-on-surface-variant text-sm">
                         No orders match your filters.
                       </TableCell>
                     </TableRow>

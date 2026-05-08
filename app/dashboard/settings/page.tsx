@@ -222,10 +222,25 @@ export default function DashboardSettingsPage() {
   }
 
   async function testEmail() {
+    if (!settings?.alert_email) return
+
     setTestingEmail(true)
-    // Trigger via Supabase edge function or n8n — placeholder call
-    await new Promise(r => setTimeout(r, 1200))
-    setToast({ type: 'success', text: `Test email sent to ${settings?.alert_email}.` })
+    try {
+      const response = await fetch('/api/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: settings.alert_email }),
+      })
+
+      if (!response.ok) {
+        const body = await response.json()
+        throw new Error(body?.error || 'Email test failed')
+      }
+
+      setToast({ type: 'success', text: `Test email sent to ${settings.alert_email}.` })
+    } catch (error) {
+      setToast({ type: 'error', text: error instanceof Error ? error.message : 'Test email failed.' })
+    }
     setTestingEmail(false)
   }
 
