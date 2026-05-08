@@ -21,21 +21,16 @@ export async function GET() {
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
     const supabase = createClient('${supabaseUrl}', '${supabaseAnonKey}');
-    const search = new URLSearchParams(window.location.search);
-    const hash = new URLSearchParams(window.location.hash.slice(1));
-    const accessToken = hash.get('access_token') || search.get('access_token');
-    const refreshToken = hash.get('refresh_token') || search.get('refresh_token');
-    const errorDescription = hash.get('error_description') || search.get('error_description');
+
     async function finish() {
-      if (errorDescription) {
+      const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
+      if (error || !data?.session) {
         window.location.href = '/auth/login';
         return;
       }
-      if (accessToken && refreshToken) {
-        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-      }
       window.location.href = '/dashboard';
     }
+
     finish();
   </script>
 </body>
