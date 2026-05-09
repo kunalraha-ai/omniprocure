@@ -341,9 +341,11 @@ export async function fetchEquivalentICs(mpn: string): Promise<EquivalentIC[]> {
 // ── BOM parsing ───────────────────────────────────────────────────────────────
 export async function parseBomWithClaude(rawData: string): Promise<BomLineItem[]> {
   const result = await claudeJson<BomLineItem[]>(
-    `You are a procurement expert. Extract all line items from the following BOM data.
-Return ONLY a raw JSON array — no markdown, no explanation:
-[{"mpn":"string","description":"string","qty":1,"manufacturer":"string"}]
+    `Extract all electronic component line items from this BOM data.
+You MUST respond with ONLY a raw JSON array, nothing else. No explanation, no markdown, no code blocks.
+Start your response with [ and end with ]
+
+Format: [{"mpn":"string","description":"string","qty":1,"manufacturer":"string"}]
 
 BOM data:
 ${rawData.slice(0, 8000)}`,
