@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import {
   Upload, ClipboardList, X, Loader2, Package,
-  AlertCircle, ChevronUp, ChevronDown, FileText,
+  AlertCircle, ChevronUp, ChevronDown, FileText, ShoppingCart, CheckCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -91,6 +91,8 @@ export default function DashboardBomPage() {
   const [showResults, setShowResults] = useState(true)
   const [lastFilename, setLastFilename] = useState<string>('')
   const [loadingPrevious, setLoadingPrevious] = useState(true)
+  // Track which MPNs have been requested as PO (mpn -> 'loading' | 'done' | 'error')
+  const [poRequests, setPoRequests] = useState<Record<string, 'loading' | 'done' | 'error'>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isLoading = submitState === 'loading'
@@ -111,7 +113,6 @@ export default function DashboardBomPage() {
         const items = data.line_items as any[]
         if (!items?.length) return
 
-        // Map stored line_items back to BomResultRow shape
         const rows: BomResultRow[] = items.map((r: any) => ({
           mpn: r.mpn,
           part_name: r.description ?? r.part_name ?? '',
@@ -141,6 +142,34 @@ export default function DashboardBomPage() {
     }
     loadLastBom()
   }, [])
+
+  // ── Request PO for a single row ───────────────────────────────────────────
+  async function requestPO(row: BomResultRow) {
+    if (!row.best_supplier || row.price == null) return
+    setPoRequests(prev => ({ ...prev, [row.mpn]: 'loading' }))
+    try {
+      const res = await fetch('/api/request-po', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mpn: row.mpn,
+          supplier: row.best_supplier,
+          price: row.price,
+          currency: 'USD',
+          moq: row.qty,
+          leadTime: row.lead_time,
+          total_value: (row.price ?? 0) * row.qty,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error(err)
+      }
+      setPoRequests(prev => ({ ...prev, [row.mpn]: 'done' }))
+    } catch (e) {
+      setPoRequests(prev => ({ ...prev, [row.mpn]: 'error' }))
+    }
+  }
 
   // ── Drag & drop ───────────────────────────────────────────────────────────
   const handleDragOver = useCallback((event: React.DragEvent) => {
@@ -182,6 +211,7 @@ export default function DashboardBomPage() {
     setSummary(null)
     setStreamEvents([])
     setLastFilename(filename)
+    setPoRequests({})
 
     const response = await fetch('/api/bom', {
       method: 'POST',
@@ -436,21 +466,54 @@ export default function DashboardBomPage() {
                           <TableHead>Unit Price</TableHead>
                           <TableHead>Lead Time</TableHead>
                           <TableHead>Stock</TableHead>
+                          <TableHead>Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {results.map((row, index) => (
-                          <TableRow key={`${row.mpn}-${index}`}>
-                            <TableCell className="font-mono text-sm font-medium text-on-surface">{row.mpn}</TableCell>
-                            <TableCell className="text-on-surface">{row.part_name}</TableCell>
-                            <TableCell className="text-on-surface-variant">{row.best_supplier ?? '—'}</TableCell>
-                            <TableCell className="text-on-surface">{row.price != null ? `$${row.price.toFixed(4)}` : '—'}</TableCell>
-                            <TableCell className="text-on-surface-variant">{row.lead_time || '—'}</TableCell>
-                            <TableCell>
-                              <Badge className={stockBadgeStyle(row.stock_status)}>{row.stock_status}</Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {results.map((row, index) => {
+                          const poState = poRequests[row.mpn]
+                          const canRequest = row.best_supplier && row.price != null && !poState
+                          return (
+                            <TableRow key={`${row.mpn}-${index}`}>
+                              <TableCell className="font-mono text-sm font-medium text-on-surface">{row.mpn}</TableCell>
+                              <TableCell className="text-on-surface">{row.part_name}</TableCell>
+                              <TableCell className="text-on-surface-variant">{row.best_supplier ?? '—'}</TableCell>
+                              <TableCell className="text-on-surface">{row.price != null ? `$${row.price.toFixed(4)}` : '—'}</TableCell>
+                              <TableCell className="text-on-surface-variant">{row.lead_time || '—'}</TableCell>
+                              <TableCell>
+                                <Badge className={stockBadgeStyle(row.stock_status)}>{row.stock_status}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {poState === 'done' ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                                    <CheckCircle className="w-3.5 h-3.5" /> Requested
+                                  </span>
+                                ) : poState === 'error' ? (
+                                  <button onClick={() => requestPO(row)}
+                                    className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors">
+                                    <AlertCircle className="w-3.5 h-3.5" /> Retry
+                                  </button>
+                                ) : (
+                                  <button
+                                    disabled={!canRequest || poState === 'loading'}
+                                    onClick={() => requestPO(row)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                    style={{
+                                      background: 'rgba(125,211,252,0.12)',
+                                      border: '1px solid rgba(125,211,252,0.25)',
+                                      color: '#7dd3fc',
+                                    }}
+                                  >
+                                    {poState === 'loading'
+                                      ? <><Loader2 className="w-3 h-3 animate-spin" />Requesting…</>
+                                      : <><ShoppingCart className="w-3 h-3" />Request PO</>
+                                    }
+                                  </button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </div>
