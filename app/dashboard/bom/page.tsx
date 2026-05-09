@@ -1,26 +1,15 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import {
-  Upload,
-  ClipboardList,
-  X,
-  Loader2,
-  Package,
-  AlertCircle,
-  ChevronUp,
-  ChevronDown,
-  FileText,
+  Upload, ClipboardList, X, Loader2, Package,
+  AlertCircle, ChevronUp, ChevronDown, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead,
+  TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -61,14 +50,10 @@ function formatFileSize(bytes: number) {
 
 function stockBadgeStyle(status: string) {
   switch (status) {
-    case 'In Stock':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-    case 'Low Stock':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
-    case 'Out of Stock':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-    default:
-      return 'bg-muted text-muted-foreground'
+    case 'In Stock':  return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+    case 'Low Stock': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+    case 'Out of Stock': return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+    default: return 'bg-muted text-muted-foreground'
   }
 }
 
@@ -99,50 +84,84 @@ export default function DashboardBomPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [results, setResults] = useState<BomResultRow[]>([])
   const [summary, setSummary] = useState<{
-    totalItems: number
-    sourced: number
-    partial: number
-    unfound: number
-    estimatedCost: number
+    totalItems: number; sourced: number; partial: number
+    unfound: number; estimatedCost: number
   } | null>(null)
   const [streamEvents, setStreamEvents] = useState<string[]>([])
   const [showResults, setShowResults] = useState(true)
+  const [lastFilename, setLastFilename] = useState<string>('')
+  const [loadingPrevious, setLoadingPrevious] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isLoading = submitState === 'loading'
 
-  const handleDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(true)
-  }, [])
+  // ── Load last BOM from Supabase on mount ──────────────────────────────────
+  useEffect(() => {
+    async function loadLastBom() {
+      try {
+        const { data, error } = await supabase
+          .from('bom_uploads')
+          .select('filename, line_items, item_count, uploaded_at')
+          .order('uploaded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-  const handleDragLeave = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(false)
-  }, [])
+        if (error || !data) return
 
-  const handleDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(false)
-    const file = event.dataTransfer.files[0]
-    if (file && isValidFile(file)) {
-      setSelectedFile(file)
+        const items = data.line_items as any[]
+        if (!items?.length) return
+
+        // Map stored line_items back to BomResultRow shape
+        const rows: BomResultRow[] = items.map((r: any) => ({
+          mpn: r.mpn,
+          part_name: r.description ?? r.part_name ?? '',
+          qty: r.qty ?? r.quantity ?? 1,
+          best_supplier: r.bestSupplier ?? r.best_supplier ?? null,
+          price: r.bestPrice ?? r.price ?? null,
+          lead_time: r.lead_time ?? '—',
+          stock_status: r.stock_status ?? (r.totalInStock > 0 ? 'In Stock' : 'Out of Stock'),
+          status: r.status ?? 'unfound',
+        }))
+
+        setResults(rows)
+        setLastFilename(data.filename)
+        setSummary({
+          totalItems: data.item_count,
+          sourced: rows.filter(r => r.status === 'sourced').length,
+          partial: rows.filter(r => r.status === 'partial').length,
+          unfound: rows.filter(r => r.status === 'unfound').length,
+          estimatedCost: rows.reduce((sum, r) => sum + ((r.price ?? 0) * r.qty), 0),
+        })
+        setSubmitState('success')
+      } catch (e) {
+        // Silently fail — fresh state is fine
+      } finally {
+        setLoadingPrevious(false)
+      }
     }
+    loadLastBom()
+  }, [])
+
+  // ── Drag & drop ───────────────────────────────────────────────────────────
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault(); setIsDragOver(true)
+  }, [])
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    event.preventDefault(); setIsDragOver(false)
+  }, [])
+  const handleDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault(); setIsDragOver(false)
+    const file = event.dataTransfer.files[0]
+    if (file && isValidFile(file)) setSelectedFile(file)
   }, [])
 
   function isValidFile(file: File) {
-    return (
-      file.type === 'text/csv' ||
-      file.name.endsWith('.csv') ||
-      file.name.endsWith('.txt')
-    )
+    return file.type === 'text/csv' || file.name.endsWith('.csv') || file.name.endsWith('.txt')
   }
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file && isValidFile(file)) {
-      setSelectedFile(file)
-    }
+    if (file && isValidFile(file)) setSelectedFile(file)
   }
 
   async function saveMonitoredParts(rows: BomResultRow[]) {
@@ -153,14 +172,7 @@ export default function DashboardBomPage() {
       quantity: row.qty,
       is_active: true,
     }))
-
-    const { error } = await supabase
-      .from('monitored_parts')
-      .upsert(payload, { onConflict: 'mpn', count: 'exact' })
-
-    if (error) {
-      console.error('Failed to save monitored parts:', error)
-    }
+    await supabase.from('monitored_parts').upsert(payload, { onConflict: 'mpn', count: 'exact' })
   }
 
   async function submitBom(raw: string, filename: string) {
@@ -169,6 +181,7 @@ export default function DashboardBomPage() {
     setResults([])
     setSummary(null)
     setStreamEvents([])
+    setLastFilename(filename)
 
     const response = await fetch('/api/bom', {
       method: 'POST',
@@ -182,9 +195,7 @@ export default function DashboardBomPage() {
     }
 
     const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('No response stream available')
-    }
+    if (!reader) throw new Error('No response stream available')
 
     const decoder = new TextDecoder()
     let buffer = ''
@@ -208,7 +219,7 @@ export default function DashboardBomPage() {
 
         if (event.type === 'line_item_result' && event.item) {
           collectedResults.push(event.item)
-          setResults((prev) => [...prev, event.item])
+          setResults((prev) => [...prev, event.item!])
           continue
         }
 
@@ -239,45 +250,26 @@ export default function DashboardBomPage() {
       let filename = 'manual-entry'
 
       if (source === 'file') {
-        if (!selectedFile) {
-          setErrorMessage('Please select a CSV file first.')
-          setSubmitState('error')
-          return
-        }
-
-        if (!isValidFile(selectedFile)) {
-          setErrorMessage('Only CSV files are supported at this time.')
-          setSubmitState('error')
-          return
-        }
-
+        if (!selectedFile) { setErrorMessage('Please select a CSV file first.'); setSubmitState('error'); return }
+        if (!isValidFile(selectedFile)) { setErrorMessage('Only CSV files are supported.'); setSubmitState('error'); return }
         raw = await readFileAsText(selectedFile)
         filename = selectedFile.name
       } else {
-        const lines = manualInput
-          .split('\n')
-          .map((line) => line.trim())
-          .filter(Boolean)
-
-        if (!lines.length) {
-          setErrorMessage('Please enter at least one part number.')
-          setSubmitState('error')
-          return
-        }
-
+        const lines = manualInput.split('\n').map(l => l.trim()).filter(Boolean)
+        if (!lines.length) { setErrorMessage('Please enter at least one part number.'); setSubmitState('error'); return }
         raw = lines.join('\n')
       }
 
       await submitBom(raw, filename)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      setErrorMessage(message)
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown error')
       setSubmitState('error')
     }
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="glass-panel-elevated rounded-[2rem] border-slate-700/70 p-8">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl space-y-4">
@@ -300,11 +292,15 @@ export default function DashboardBomPage() {
             </div>
             <div className="glass-panel rounded-3xl p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Results</p>
-              <p className="mt-3 text-2xl font-semibold text-on-surface">{results.length}</p>
+              <p className="mt-3 text-2xl font-semibold text-on-surface">
+                {loadingPrevious ? '…' : results.length}
+              </p>
             </div>
             <div className="glass-panel rounded-3xl p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Saved parts</p>
-              <p className="mt-3 text-2xl font-semibold text-on-surface">{results.length}</p>
+              <p className="mt-3 text-2xl font-semibold text-on-surface">
+                {loadingPrevious ? '…' : results.length}
+              </p>
             </div>
           </div>
         </div>
@@ -312,37 +308,30 @@ export default function DashboardBomPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
+
+          {/* Upload panel */}
           <div className="glass-panel rounded-3xl border-slate-700/60 p-6">
             <Tabs defaultValue="file">
               <TabsList className="grid grid-cols-2 gap-2 p-1 rounded-3xl bg-slate-950/70">
                 <TabsTrigger value="file" className="gap-2 rounded-3xl">
-                  <Upload className="w-4 h-4" />
-                  File Upload
+                  <Upload className="w-4 h-4" /> File Upload
                 </TabsTrigger>
                 <TabsTrigger value="manual" className="gap-2 rounded-3xl">
-                  <ClipboardList className="w-4 h-4" />
-                  Manual Entry
+                  <ClipboardList className="w-4 h-4" /> Manual Entry
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="file" className="mt-6">
                 <Card className="glass-panel rounded-3xl border-slate-700/50">
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold text-on-surface">
-                      <Upload className="w-4 h-4" />
-                      Upload BOM
+                    <CardTitle className="text-base font-semibold text-on-surface flex items-center gap-2">
+                      <Upload className="w-4 h-4" /> Upload BOM
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div
-                      className={`glass-panel rounded-3xl border-dashed border-slate-600 p-8 text-center transition-all cursor-pointer ${
-                        isDragOver
-                          ? 'border-primary bg-primary-soft'
-                          : 'hover:border-primary/80'
-                      }`}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
+                      className={`glass-panel rounded-3xl border-dashed border-slate-600 p-8 text-center transition-all cursor-pointer ${isDragOver ? 'border-primary bg-primary-soft' : 'hover:border-primary/80'}`}
+                      onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
                       onClick={() => fileInputRef.current?.click()}
                     >
                       {selectedFile ? (
@@ -350,20 +339,10 @@ export default function DashboardBomPage() {
                           <FileText className="w-8 h-8 text-primary" />
                           <div className="text-left">
                             <p className="font-medium text-on-surface">{selectedFile.name}</p>
-                            <p className="text-sm text-on-surface-variant">
-                              {formatFileSize(selectedFile.size)}
-                            </p>
+                            <p className="text-sm text-on-surface-variant">{formatFileSize(selectedFile.size)}</p>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="ml-2 h-8 w-8"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setSelectedFile(null)
-                              if (fileInputRef.current) fileInputRef.current.value = ''
-                            }}
-                          >
+                          <Button variant="ghost" size="icon" className="ml-2 h-8 w-8"
+                            onClick={e => { e.stopPropagation(); setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}>
                             <X className="w-4 h-4" />
                           </Button>
                         </div>
@@ -371,32 +350,14 @@ export default function DashboardBomPage() {
                         <>
                           <Upload className="w-10 h-10 text-on-surface-variant mx-auto mb-3" />
                           <p className="font-medium text-on-surface mb-1">Drop your BOM file here</p>
-                          <p className="text-sm text-on-surface-variant">
-                            CSV only — each line should include one MPN.
-                          </p>
+                          <p className="text-sm text-on-surface-variant">CSV only — each line should include one MPN.</p>
                         </>
                       )}
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".csv,.txt"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                      />
+                      <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFileSelect} />
                     </div>
-                    <Button
-                      className="w-full glass-button-primary rounded-3xl py-4 text-sm font-semibold"
-                      disabled={!selectedFile || isLoading}
-                      onClick={() => handleSubmit('file')}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        'Submit BOM'
-                      )}
+                    <Button className="w-full glass-button-primary rounded-3xl py-4 text-sm font-semibold"
+                      disabled={!selectedFile || isLoading} onClick={() => handleSubmit('file')}>
+                      {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing…</> : 'Submit BOM'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -405,40 +366,27 @@ export default function DashboardBomPage() {
               <TabsContent value="manual" className="mt-6">
                 <Card className="glass-panel rounded-3xl border-slate-700/50">
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold text-on-surface">
-                      <ClipboardList className="w-4 h-4" />
-                      Manual Part Numbers
+                    <CardTitle className="text-base font-semibold text-on-surface flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4" /> Manual Part Numbers
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-3">
                       <label className="text-sm font-medium text-on-surface block">Part numbers</label>
                       <Textarea
-                        placeholder={
-                          'Enter one MPN per line, e.g.:\nATMEGA328P-PU\nSTM32F103C8T6\nLM358P'
-                        }
+                        placeholder={'Enter one MPN per line, e.g.:\nATMEGA328P-PU\nSTM32F103C8T6\nLM358P'}
                         className="glass-input min-h-[160px] w-full rounded-3xl px-4 py-3 font-mono text-sm text-on-surface resize-none"
                         value={manualInput}
-                        onChange={(event) => setManualInput(event.target.value)}
+                        onChange={e => setManualInput(e.target.value)}
                         disabled={isLoading}
                       />
                       <p className="text-xs text-on-surface-variant">
-                        {manualInput.split('\n').filter((line) => line.trim()).length} part number(s) entered
+                        {manualInput.split('\n').filter(l => l.trim()).length} part number(s) entered
                       </p>
                     </div>
-                    <Button
-                      className="w-full glass-button-primary rounded-3xl py-4 text-sm font-semibold"
-                      disabled={!manualInput.trim() || isLoading}
-                      onClick={() => handleSubmit('manual')}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        'Submit Part Numbers'
-                      )}
+                    <Button className="w-full glass-button-primary rounded-3xl py-4 text-sm font-semibold"
+                      disabled={!manualInput.trim() || isLoading} onClick={() => handleSubmit('manual')}>
+                      {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing…</> : 'Submit Part Numbers'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -446,6 +394,7 @@ export default function DashboardBomPage() {
             </Tabs>
           </div>
 
+          {/* Error */}
           {submitState === 'error' && (
             <Card className="glass-panel rounded-3xl border-red-500/20 bg-red-500/10">
               <CardContent className="flex items-start gap-3 py-4">
@@ -458,6 +407,7 @@ export default function DashboardBomPage() {
             </Card>
           )}
 
+          {/* Results */}
           {results.length > 0 && (
             <Card className="glass-panel rounded-3xl border-slate-700/60 overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between gap-3 py-4 px-6 border-b border-slate-700/70">
@@ -465,21 +415,15 @@ export default function DashboardBomPage() {
                   <Package className="w-4 h-4" />
                   Procurement Results
                   <Badge variant="secondary" className="ml-1">{results.length}</Badge>
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-on-surface-variant"
-                  onClick={() => setShowResults((value) => !value)}
-                >
-                  {showResults ? (
-                    <><ChevronUp className="w-4 h-4" /> Hide</>
-                  ) : (
-                    <><ChevronDown className="w-4 h-4" /> Show</>
+                  {lastFilename && (
+                    <span className="text-xs text-on-surface-variant font-normal ml-1">— {lastFilename}</span>
                   )}
+                </CardTitle>
+                <Button variant="ghost" size="sm" className="gap-1 text-on-surface-variant"
+                  onClick={() => setShowResults(v => !v)}>
+                  {showResults ? <><ChevronUp className="w-4 h-4" />Hide</> : <><ChevronDown className="w-4 h-4" />Show</>}
                 </Button>
               </CardHeader>
-
               {showResults && (
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -516,24 +460,21 @@ export default function DashboardBomPage() {
           )}
         </div>
 
+        {/* Sidebar */}
         <aside className="space-y-6">
           <div className="glass-panel rounded-3xl border-slate-700/60 p-6">
             <h2 className="text-base font-semibold text-on-surface">Progress Summary</h2>
             <div className="mt-4 grid gap-3">
-              <div className="rounded-3xl border border-slate-700/80 bg-slate-950/60 p-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Parts found</p>
-                <p className="mt-2 text-3xl font-semibold text-on-surface">{summary?.totalItems ?? 0}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-700/80 bg-slate-950/60 p-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Supplier matches</p>
-                <p className="mt-2 text-3xl font-semibold text-on-surface">{summary?.sourced ?? 0}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-700/80 bg-slate-950/60 p-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Estimated cost</p>
-                <p className="mt-2 text-3xl font-semibold text-on-surface">
-                  ${summary?.estimatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
-                </p>
-              </div>
+              {[
+                { label: 'Parts found',      value: loadingPrevious ? '…' : (summary?.totalItems ?? 0) },
+                { label: 'Supplier matches', value: loadingPrevious ? '…' : (summary?.sourced ?? 0) },
+                { label: 'Estimated cost',   value: loadingPrevious ? '…' : `$${(summary?.estimatedCost ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-3xl border border-slate-700/80 bg-slate-950/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">{label}</p>
+                  <p className="mt-2 text-3xl font-semibold text-on-surface">{value}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -542,7 +483,7 @@ export default function DashboardBomPage() {
             <div className="mt-4 space-y-3 max-h-72 overflow-y-auto">
               {streamEvents.length === 0 ? (
                 <div className="rounded-3xl border border-slate-700/80 bg-slate-950/60 p-4 text-sm text-on-surface-variant">
-                  Waiting for import events to appear.
+                  {loadingPrevious ? 'Loading previous results…' : 'Waiting for import events to appear.'}
                 </div>
               ) : (
                 streamEvents.map((event, index) => (
