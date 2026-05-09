@@ -1,15 +1,7 @@
 /**
  * POST /api/monitor
  * ─────────────────────────────────────────────────────────────────────────────
- * Fetches live price + stock data for a list of MPNs from OEM Secrets,
- * sends to Claude for analysis, returns alert data.
- * Call this on a cron (Vercel cron / your own scheduler) or on demand.
- *
- * POST body: { mpns?: string[] }  — omit to use watchlist table
- * GET       : returns current watchlist from Supabase
- *
- * PUT  /api/monitor  : add MPN to watchlist  { mpn, label? }
- * DELETE /api/monitor: remove MPN            { mpn }
+ * Fetches live price + stock data, analyses with Claude, saves alerts.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -69,18 +61,29 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   let mpns: string[] = body?.mpns ?? [];
 
-  // If no mpns provided, pull from watchlist table
   if (!mpns.length) {
     const { data } = await supabaseAdmin.from("watchlist").select("mpn");
     mpns = (data ?? []).map((r: { mpn: string }) => r.mpn);
   }
 
+  // Also pull from monitored_parts if watchlist is empty
   if (!mpns.length) {
-    return NextResponse.json({ success: true, message: "No parts to monitor. Add parts to watchlist.", alerts: [] });
+    const { data } = await supabaseAdmin
+      .from("monitored_parts")
+      .select("mpn")
+      .eq("is_active", true);
+    mpns = (data ?? []).map((r: { mpn: string }) => r.mpn);
+  }
+
+  if (!mpns.length) {
+    return NextResponse.json({
+      success: true,
+      message: "No parts to monitor. Upload a BOM first.",
+      alerts: [],
+    });
   }
 
   try {
-    // Fetch live data for all MPNs in parallel
     const fetchResults = await Promise.allSettled(
       mpns.map(async (mpn) => ({
         mpn,
@@ -89,12 +92,15 @@ export async function POST(req: NextRequest) {
     );
 
     const allSuppliers: SupplierResult[] = fetchResults
-      .filter((r): r is PromiseFulfilledResult<{ mpn: string; suppliers: SupplierResult[] }> => r.status === "fulfilled")
+      .filter((r): r is PromiseFulfilledResult<{ mpn: string; suppliers: SupplierResult[] }> =>
+        r.status === "fulfilled"
+      )
       .flatMap(r => r.value.suppliers);
 
-    // Per-part summaries
     const partSummaries = fetchResults
-      .filter((r): r is PromiseFulfilledResult<{ mpn: string; suppliers: SupplierResult[] }> => r.status === "fulfilled")
+      .filter((r): r is PromiseFulfilledResult<{ mpn: string; suppliers: SupplierResult[] }> =>
+        r.status === "fulfilled"
+      )
       .map(r => {
         const inStock = r.value.suppliers.filter(s => s.hasPrice && s.stock > 0);
         const best = inStock[0];
@@ -104,23 +110,78 @@ export async function POST(req: NextRequest) {
           supplierCount: inStock.length,
           bestPrice: best?.price ?? null,
           bestLeadTime: best?.leadTime ?? null,
-          status: inStock.length === 0 ? "out_of_stock" : inStock.length === 1 ? "single_source" : "healthy",
+          status: inStock.length === 0
+            ? "out_of_stock"
+            : inStock.length === 1
+            ? "single_source"
+            : "healthy",
         };
       });
 
     // Claude analysis
     const analysis = await analyzeMarketData(allSuppliers);
 
-    // Update last_checked_at in watchlist
+    // ✅ Save alerts to Supabase if Claude flagged anything
+    const savedAlerts: any[] = [];
+    if (analysis?.alert && analysis.flaggedParts?.length) {
+      for (const flaggedMpn of analysis.flaggedParts) {
+        try {
+          const { data: alertData } = await supabaseAdmin
+            .from("alerts")
+            .insert({
+              mpn: flaggedMpn.toUpperCase(),
+              urgency: analysis.urgency,
+              summary: analysis.summary,
+              recommendation: analysis.recommendation ?? null,
+              flagged_by: "monitor",
+              is_read: false,
+              created_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (alertData) savedAlerts.push(alertData);
+        } catch (e: any) {
+          console.error(`[Monitor] Failed to save alert for ${flaggedMpn}:`, e?.message);
+        }
+      }
+    }
+
+    // ✅ Also auto-alert any part with zero stock across all suppliers
+    for (const part of partSummaries) {
+      if (part.status === "out_of_stock") {
+        // Avoid duplicate alerts — check if one exists in last 24h
+        const { data: existing } = await supabaseAdmin
+          .from("alerts")
+          .select("id")
+          .eq("mpn", part.mpn)
+          .gte("created_at", new Date(Date.now() - 86_400_000).toISOString())
+          .limit(1);
+
+        if (!existing?.length) {
+          await supabaseAdmin.from("alerts").insert({
+            mpn: part.mpn,
+            urgency: "high",
+            summary: `${part.mpn} has zero stock across all suppliers.`,
+            recommendation: "buy_now",
+            flagged_by: "monitor",
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    // Update last_checked_at
     await Promise.allSettled(
       mpns.map(mpn =>
-        supabaseAdmin.from("watchlist")
+        supabaseAdmin
+          .from("watchlist")
           .update({ last_checked_at: new Date().toISOString() })
           .eq("mpn", mpn)
       )
     );
 
-    // Audit log
     await logAuditEvent({
       action: "monitor_check",
       details: {
@@ -128,14 +189,15 @@ export async function POST(req: NextRequest) {
         alert: analysis?.alert,
         urgency: analysis?.urgency,
         recommendation: analysis?.recommendation,
+        alertsSaved: savedAlerts.length,
       },
     });
 
-    // If alert, update last_alert_at
     if (analysis?.alert) {
       await Promise.allSettled(
         (analysis.flaggedParts ?? []).map(mpn =>
-          supabaseAdmin.from("watchlist")
+          supabaseAdmin
+            .from("watchlist")
             .update({ last_alert_at: new Date().toISOString() })
             .eq("mpn", mpn)
         )
@@ -147,7 +209,14 @@ export async function POST(req: NextRequest) {
       checkedAt: new Date().toISOString(),
       mpnsChecked: mpns.length,
       partSummaries,
-      analysis: analysis ?? { alert: false, urgency: "none", summary: "All clear", recommendation: "hold", flaggedParts: [] },
+      alertsSaved: savedAlerts.length,
+      analysis: analysis ?? {
+        alert: false,
+        urgency: "none",
+        summary: "All clear",
+        recommendation: "hold",
+        flaggedParts: [],
+      },
     });
 
   } catch (err: any) {

@@ -1,12 +1,5 @@
 /**
  * POST /api/bom
- * ─────────────────────────────────────────────────────────────────────────────
- * Accepts a BOM as JSON text or CSV string, parses it with Claude,
- * then searches OEM Secrets for every line item in parallel.
- * Streams results back as SSE so the UI can show progress.
- *
- * Body: { raw: string, filename?: string }
- * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest } from "next/server";
@@ -56,7 +49,6 @@ export async function POST(req: NextRequest) {
       try {
         send("started", { message: "Parsing BOM with Claude…" });
 
-        // 1. Parse BOM → line items
         const lineItems = await parseBomWithClaude(raw);
         if (!lineItems.length) {
           send("error", { message: "Could not extract any line items from BOM. Check format." });
@@ -65,8 +57,6 @@ export async function POST(req: NextRequest) {
         }
 
         send("parsed", { count: lineItems.length, items: lineItems });
-
-        // 2. Search OEM Secrets for all line items in parallel
         send("searching", { message: `Searching ${lineItems.length} parts across 140+ distributors…` });
 
         const results: BomLineResult[] = [];
@@ -76,6 +66,7 @@ export async function POST(req: NextRequest) {
             const suppliers = await fetchOemSecrets(item.mpn).catch(() => []);
             const inStock = suppliers.filter(s => s.hasPrice && s.stock > 0);
             const best = inStock.sort((a, b) => (a.price ?? 9999) - (b.price ?? 9999))[0];
+
             const result: BomLineResult = {
               ...item,
               suppliers,
@@ -85,11 +76,26 @@ export async function POST(req: NextRequest) {
               status: inStock.length > 0 ? "sourced" : suppliers.length > 0 ? "partial" : "unfound",
             };
             results.push(result);
-            send("line_item_result", { item: result });
+
+            // ✅ Map to the field names BomResultRow expects on the frontend
+            send("line_item_result", {
+              item: {
+                mpn: result.mpn,
+                part_name: result.description,
+                qty: result.qty,
+                best_supplier: result.bestSupplier,
+                price: result.bestPrice,
+                lead_time: best?.leadTime ?? "—",
+                stock_status: inStock.length > 0
+                  ? (best?.stock ?? 0) < 100 ? "Low Stock" : "In Stock"
+                  : "Out of Stock",
+                status: result.status,
+              },
+            });
           })
         );
 
-        // 3. Save to Supabase
+        // Save to Supabase
         try {
           await supabaseAdmin.from("bom_uploads").insert({
             filename,
@@ -99,13 +105,15 @@ export async function POST(req: NextRequest) {
           });
         } catch {}
 
-        // 4. Audit log
         await logAuditEvent({
           action: "bom_upload",
-          details: { filename, itemCount: results.length, sourcedCount: results.filter(r => r.status === "sourced").length },
+          details: {
+            filename,
+            itemCount: results.length,
+            sourcedCount: results.filter(r => r.status === "sourced").length,
+          },
         });
 
-        // 5. Summary
         const sourced   = results.filter(r => r.status === "sourced").length;
         const partial   = results.filter(r => r.status === "partial").length;
         const unfound   = results.filter(r => r.status === "unfound").length;
@@ -114,7 +122,6 @@ export async function POST(req: NextRequest) {
         send("complete", {
           totalItems: results.length, sourced, partial, unfound,
           estimatedCost: parseFloat(totalCost.toFixed(2)),
-          results,
         });
 
       } catch (err: any) {
@@ -127,6 +134,10 @@ export async function POST(req: NextRequest) {
   });
 
   return new Response(stream, {
-    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
   });
 }
