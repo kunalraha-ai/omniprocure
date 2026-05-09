@@ -268,15 +268,13 @@ async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000
     if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
     const d = await res.json();
     const text: string = d?.content?.[0]?.text ?? "";
-    // Try array first, then object
-    const arrMatch = text.match(/\[[\s\S]*\]/);
-    const objMatch = text.match(/\{[\s\S]*\}/);
-    // Prefer whichever comes first in the text
-    const arrIdx = arrMatch ? text.indexOf(arrMatch[0]) : Infinity;
-    const objIdx = objMatch ? text.indexOf(objMatch[0]) : Infinity;
-    const raw = arrIdx < objIdx ? arrMatch : objMatch;
-    if (!raw) throw new Error("No JSON in response");
-    return JSON.parse(raw[0]) as T;
+    // Find first valid JSON array or object
+    const jsonMatch = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+    if (!jsonMatch) throw new Error("No JSON in response");
+    // Validate it starts with [ or {
+    const candidate = jsonMatch[0].trim();
+    if (!candidate.startsWith('[') && !candidate.startsWith('{')) throw new Error("Not valid JSON start");
+    return JSON.parse(candidate) as T;
   } catch (err: any) {
     console.error(`[Claude] Error: ${err?.message}`);
     return null;
