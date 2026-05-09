@@ -255,26 +255,55 @@ export async function fetchVariants(mpn: string): Promise<VariantResult[]> {
 }
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
+// FIX: robust JSON extractor that won't match plain-text brackets like [HUMAN APPROVED]
 async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000): Promise<T | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: prompt }],
+      }),
       signal: AbortSignal.timeout(timeout),
     });
     if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
     const d = await res.json();
     const text: string = d?.content?.[0]?.text ?? "";
-    // Find first valid JSON array or object
-    const jsonMatch = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-    if (!jsonMatch) throw new Error("No JSON in response");
-    // Validate it starts with [ or {
-    const candidate = jsonMatch[0].trim();
-    if (!candidate.startsWith('[') && !candidate.startsWith('{')) throw new Error("Not valid JSON start");
-    return JSON.parse(candidate) as T;
+
+    // Find JSON array or object — must start with [ or { immediately
+    // Use two separate searches and pick whichever appears first
+    const arrMatch = text.match(/\[[\s\S]*\]/);
+    const objMatch = text.match(/\{[\s\S]*\}/);
+
+    let candidate: string | null = null;
+    if (arrMatch && objMatch) {
+      candidate = text.indexOf(arrMatch[0]) < text.indexOf(objMatch[0]) ? arrMatch[0] : objMatch[0];
+    } else if (arrMatch) {
+      candidate = arrMatch[0];
+    } else if (objMatch) {
+      candidate = objMatch[0];
+    }
+
+    if (!candidate) throw new Error("No JSON in response");
+
+    // Safety check: must start with [ or { (rejects "[HUMAN APPROVED]" etc.)
+    const trimmed = candidate.trim();
+    if (trimmed[0] !== '[' && trimmed[0] !== '{') throw new Error("Not valid JSON");
+
+    // For arrays: first char after [ must be { or ] (not a letter)
+    if (trimmed[0] === '[' && trimmed[1] !== '{' && trimmed[1] !== ']' && trimmed[1] !== '\n' && trimmed[1] !== ' ') {
+      throw new Error("Array does not contain objects");
+    }
+
+    return JSON.parse(trimmed) as T;
   } catch (err: any) {
     console.error(`[Claude] Error: ${err?.message}`);
     return null;
@@ -342,10 +371,10 @@ export async function fetchEquivalentICs(mpn: string): Promise<EquivalentIC[]> {
 export async function parseBomWithClaude(rawData: string): Promise<BomLineItem[]> {
   const result = await claudeJson<BomLineItem[]>(
     `Extract all electronic component line items from this BOM data.
-You MUST respond with ONLY a raw JSON array, nothing else. No explanation, no markdown, no code blocks.
-Start your response with [ and end with ]
+You MUST respond with ONLY a JSON array. No explanation, no markdown, no code blocks.
+The first character of your response must be [ and the last must be ]
 
-Format: [{"mpn":"string","description":"string","qty":1,"manufacturer":"string"}]
+Each item: {"mpn":"string","description":"string","qty":1,"manufacturer":"string"}
 
 BOM data:
 ${rawData.slice(0, 8000)}`,
@@ -373,43 +402,70 @@ Return ONLY raw JSON (no markdown):
   );
 }
 
-export async function draftCounterOffer(supplier: string, mpn: string, unitPrice: number, currency: string, moq: number, negotiationReason: string): Promise<string> {
-  const result = await claudeJson<string>(
-    `Draft a professional procurement counter-offer email body to ${supplier}.
+export async function draftCounterOffer(
+  supplier: string, mpn: string, unitPrice: number,
+  currency: string, moq: number, negotiationReason: string
+): Promise<string> {
+  // Use plain text Claude call — not claudeJson — since this returns prose not JSON
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return `Dear ${supplier},\n\nWe would like to negotiate the price for ${mpn}.\n\nBest regards,\nProcurement Team`;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 800,
+        messages: [{
+          role: "user",
+          content: `Draft a professional procurement counter-offer email body to ${supplier}.
 Current quote: $${unitPrice} ${currency} for MPN ${mpn}, MOQ ${moq} units.
 Reason to negotiate: ${negotiationReason}
 Aim for 8-15% price reduction or better MOQ. Be professional and concise.
-Return ONLY the plain text email body — no subject line, no JSON wrapper.`,
-    800
-  );
-  return typeof result === "string" ? result : `Dear ${supplier},\n\nThank you for your quote for ${mpn}. We would like to discuss the pricing further. Could you consider a revised price for a similar or larger quantity?\n\nBest regards,\nProcurement Team`;
+Return ONLY the plain text email body — no subject line, no JSON.`,
+        }],
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    const d = await res.json();
+    return d?.content?.[0]?.text ?? `Dear ${supplier},\n\nThank you for your quote for ${mpn}.\n\nBest regards,\nProcurement Team`;
+  } catch {
+    return `Dear ${supplier},\n\nThank you for your quote for ${mpn}. We would like to discuss the pricing further.\n\nBest regards,\nProcurement Team`;
+  }
 }
 
+// FIX: generatePoText no longer calls Claude — generates PO text directly
+// This prevents "[HUMAN APPROVED]" being parsed as JSON
 export async function generatePoText(params: {
   supplier: string; mpn: string; price: number | null; moq: number;
   leadTime: string; region: string; modNote?: string;
 }): Promise<string> {
   const poNumber = `PO-${Date.now().toString().slice(-8)}`;
-  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const result = await claudeJson<string>(
-    `Generate a formal purchase order in plain text.
-PO Number: ${poNumber}
+  const today = new Date().toLocaleDateString("en-US", {
+    year: "numeric", month: "long", day: "numeric",
+  });
+  const total = ((params.price ?? 0) * params.moq).toFixed(2);
+
+  return `PURCHASE ORDER ${poNumber}
 Date: ${today}
 Supplier: ${params.supplier}
+Region: ${params.region}
 MPN: ${params.mpn}
 Unit Price: USD ${params.price?.toFixed(4) ?? "TBD"}
 Quantity (MOQ): ${params.moq}
-Total Value: USD ${((params.price ?? 0) * params.moq).toFixed(2)}
+Total Value: USD ${total}
 Lead Time: ${params.leadTime}
-Region: ${params.region}
-${params.modNote ? `Special instructions: ${params.modNote}` : ""}
+Payment Terms: Net 30
+Delivery: Per supplier standard terms
 Status: HUMAN APPROVED
+${params.modNote ? `\nSpecial Instructions: ${params.modNote}` : ""}
 
-Include standard T&Cs, payment terms (Net 30), and delivery expectations.
-Return ONLY the plain text PO — no JSON wrapper.`,
-    1500
-  );
-  return typeof result === "string" ? result : `PURCHASE ORDER ${poNumber}\nDate: ${today}\nSupplier: ${params.supplier}\nMPN: ${params.mpn}\nUnit Price: USD ${params.price?.toFixed(4)}\nQty: ${params.moq}\nStatus: HUMAN APPROVED`;
+This purchase order is issued subject to standard terms and conditions.
+Payment due within 30 days of invoice receipt.`;
 }
 
 // ── Price / stock monitor ─────────────────────────────────────────────────────
@@ -420,15 +476,15 @@ export async function analyzeMarketData(stockData: SupplierResult[]) {
     flaggedParts: string[];
   }>(
     `You are a procurement analyst monitoring electronic parts market data.
-Analyze this live supplier data and flag:
+Analyze this live supplier data and flag any issues:
 1. Stock dropping below 100 units for any part
 2. Lead times exceeding 8 weeks
 3. Any part with zero stock across all suppliers
 
 Data: ${JSON.stringify(stockData.slice(0, 20))}
 
-Respond ONLY with raw JSON:
-{"alert":true,"urgency":"none|low|medium|high","summary":"max 200 chars","recommendation":"buy_now|watch|hold","flaggedParts":["mpn1"]}`,
+Respond ONLY with raw JSON (no markdown, no explanation):
+{"alert":false,"urgency":"none","summary":"All clear","recommendation":"hold","flaggedParts":[]}`,
     400
   );
 }
@@ -452,14 +508,22 @@ export async function saveCache(
 ) {
   try {
     await supabaseAdmin.from("search_cache").upsert(
-      { mpn_normalized: mpnNormalized, results, claude_recommendation: recommendation, variant_results: variantResults, equivalent_ics: equivalentIcs, updated_at: new Date().toISOString(), hit_count: 1 },
+      {
+        mpn_normalized: mpnNormalized, results, claude_recommendation: recommendation,
+        variant_results: variantResults, equivalent_ics: equivalentIcs,
+        updated_at: new Date().toISOString(), hit_count: 1,
+      },
       { onConflict: "mpn_normalized" }
     );
   } catch (e: any) { console.error("[Cache] Save failed:", e?.message); }
 }
 
 export async function bumpHitCount(mpnNormalized: string, current: number) {
-  try { await supabaseAdmin.from("search_cache").update({ hit_count: current + 1 }).eq("mpn_normalized", mpnNormalized); } catch {}
+  try {
+    await supabaseAdmin.from("search_cache")
+      .update({ hit_count: current + 1 })
+      .eq("mpn_normalized", mpnNormalized);
+  } catch {}
 }
 
 // ── Supabase: Audit trail ─────────────────────────────────────────────────────
@@ -504,7 +568,11 @@ export async function createHitlRequest(req: Omit<HitlRequest, "createdAt" | "st
   return id;
 }
 
-export async function updateHitlStatus(id: string, status: "approved" | "rejected" | "modified", modifiedNote?: string) {
+export async function updateHitlStatus(
+  id: string,
+  status: "approved" | "rejected" | "modified",
+  modifiedNote?: string
+) {
   try {
     await supabaseAdmin.from("hitl_queue").update({
       status,
