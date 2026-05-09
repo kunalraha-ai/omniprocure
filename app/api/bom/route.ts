@@ -103,6 +103,21 @@ export async function POST(req: NextRequest) {
             item_count: results.length,
             uploaded_at: new Date().toISOString(),
           });
+
+          const monitoredPayload = results
+            .filter(r => r.status === 'sourced' || r.status === 'partial')
+            .map(r => ({
+              mpn: r.mpn,
+              part_name: r.description,
+              quantity: r.qty,
+              is_active: true,
+            }));
+
+          if (monitoredPayload.length > 0) {
+            await supabaseAdmin
+              .from('monitored_parts')
+              .upsert(monitoredPayload, { onConflict: 'mpn' });
+          }
         } catch {}
 
         await logAuditEvent({
