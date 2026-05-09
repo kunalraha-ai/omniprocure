@@ -14,6 +14,8 @@ import {
   updateHitlStatus,
   generatePoText,
   logAuditEvent,
+  notifyPoApproved,
+  notifyPoPending,
 } from "@/lib/procurement";
 
 export const maxDuration = 45;
@@ -28,6 +30,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ success: true, request: data });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
+    await notifyPoApproved({
+      poNumber: data.po_number,
+      mpn: hitlRequest.mpn,
+      supplier: hitlRequest.supplier,
+      totalValue: hitlRequest.total_value,
+      hitlId: id,
   }
 }
 

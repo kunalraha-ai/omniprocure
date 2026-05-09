@@ -19,6 +19,8 @@ import {
   getPendingHitlRequests,
   getAllHitlRequests,
   logAuditEvent,
+  notifyPoApproved,
+  notifyPoPending,
   HitlRequest,
 } from "@/lib/procurement";
 
@@ -39,6 +41,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "supplier and mpn are required" }, { status: 400 });
   }
 
+  await notifyPoPending({
+    mpn, supplier,
+    totalValue: total_value ?? price * moq,
+    hitlId: id,
+    aiRecommendation,
+  });
   const id = `hitl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const computedTotal = totalValue ?? ((price ?? 0) * moq);
 

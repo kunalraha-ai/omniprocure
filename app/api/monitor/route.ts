@@ -12,6 +12,7 @@ import {
   logAuditEvent,
   supabaseAdmin,
   SupplierResult,
+  notifyAlert,
 } from "@/lib/procurement";
 
 export const maxDuration = 60;
@@ -39,6 +40,12 @@ export async function PUT(req: NextRequest) {
       { onConflict: "mpn" }
     );
     return NextResponse.json({ success: true, message: `${mpn} added to watchlist` });
+    await notifyAlert({
+      mpn: flaggedMpn,
+      urgency: analysis.urgency,
+      summary: analysis.summary,
+      recommendation: analysis.recommendation ?? 'hold',
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
