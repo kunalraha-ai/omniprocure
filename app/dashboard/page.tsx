@@ -1,6 +1,5 @@
 ﻿'use client'
 
-import "./glacier.css";
 import { useState, useEffect } from 'react'
 import { AlertTriangle, AlertCircle, ShoppingCart, Zap, TrendingUp, TrendingDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
