@@ -1,0 +1,93 @@
+/**
+ * app/dashboard/glacier.css
+ * Shared Glacier glassmorphism design tokens for all dashboard pages
+ */
+
+.glass-panel {
+  background: rgba(15, 21, 36, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(125, 211, 252, 0.1);
+}
+.glass-elevated {
+  background: rgba(15, 21, 36, 0.75);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(125, 211, 252, 0.15);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+}
+.glass-button {
+  background: rgba(125, 211, 252, 0.15);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  transition: all 0.2s ease;
+}
+.glass-button:hover {
+  background: rgba(125, 211, 252, 0.25);
+  box-shadow: 0 0 15px rgba(125, 211, 252, 0.1);
+}
+.glass-button-primary {
+  background: rgba(125, 211, 252, 0.8);
+  color: #0a0e1a;
+  border: 1px solid rgba(125, 211, 252, 1);
+  transition: all 0.2s ease;
+}
+.glass-button-primary:hover {
+  background: rgba(125, 211, 252, 1);
+  box-shadow: 0 0 20px rgba(125, 211, 252, 0.4);
+}
+.glass-button-secondary {
+  background: rgba(26, 36, 56, 0.5);
+  border: 1px solid rgba(160, 180, 196, 0.2);
+  transition: all 0.2s ease;
+}
+.glass-button-secondary:hover {
+  background: rgba(26, 36, 56, 0.8);
+  border-color: rgba(160, 180, 196, 0.4);
+}
+.glass-input {
+  background: rgba(15, 21, 36, 0.4);
+  border: 1px solid rgba(125, 211, 252, 0.1);
+  transition: all 0.2s ease;
+}
+.glass-input:focus-within {
+  border-color: rgba(125, 211, 252, 0.5);
+  box-shadow: 0 0 15px rgba(125, 211, 252, 0.1);
+}
+.glow-text {
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.3);
+}
+.status-badge {
+  background: rgba(26, 36, 56, 0.6);
+  border: 1px solid rgba(160, 180, 196, 0.15);
+}
+.status-badge.awaiting {
+  background: rgba(200, 160, 240, 0.15);
+  border-color: rgba(200, 160, 240, 0.3);
+  color: #c8a0f0;
+}
+.status-badge.generated {
+  background: rgba(125, 211, 252, 0.15);
+  border-color: rgba(125, 211, 252, 0.3);
+  color: #7dd3fc;
+}
+.alert-banner {
+  background: rgba(61, 20, 20, 0.4);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  box-shadow: 0 0 30px rgba(255, 107, 107, 0.05);
+}
+.ambient-glow-primary {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.06), transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.ambient-glow-tertiary {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(200, 160, 240, 0.04), transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
