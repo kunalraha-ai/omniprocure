@@ -270,8 +270,11 @@ async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000
     const text: string = d?.content?.[0]?.text ?? "";
     // Try array first, then object
     const arrMatch = text.match(/\[[\s\S]*\]/);
-    const objMatch = text.match(/\{[\s\S]*?\}/);
-    const raw = arrMatch ?? objMatch;
+    const objMatch = text.match(/\{[\s\S]*\}/);
+    // Prefer whichever comes first in the text
+    const arrIdx = arrMatch ? text.indexOf(arrMatch[0]) : Infinity;
+    const objIdx = objMatch ? text.indexOf(objMatch[0]) : Infinity;
+    const raw = arrIdx < objIdx ? arrMatch : objMatch;
     if (!raw) throw new Error("No JSON in response");
     return JSON.parse(raw[0]) as T;
   } catch (err: any) {
