@@ -4,20 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   User, Bell, Shield, Save, Lock, ExternalLink,
   Loader2, AlertTriangle, CheckCircle, Send, Trash2,
-  RefreshCw, ChevronDown, Package
+  RefreshCw, Package
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue
-} from '@/components/ui/select'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -55,15 +50,15 @@ function Toast({ toast, onDismiss }: { toast: ToastMsg; onDismiss: () => void })
 
   return (
     <div
-      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium transition-all
+      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium transition-all
         ${toast.type === 'success'
-          ? 'bg-background border-green-500/30 text-foreground'
-          : 'bg-background border-destructive/30 text-foreground'
+          ? 'glass-panel border-green-500/30 text-on-surface'
+          : 'glass-panel border-red-500/30 text-on-surface'
         }`}
     >
       {toast.type === 'success'
-        ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-        : <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+        ? <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
+        : <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
       }
       {toast.text}
     </div>
@@ -78,15 +73,13 @@ function Section({
   icon: React.ElementType; title: string; children: React.ReactNode
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          <Icon className="w-4 h-4" />
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-5">{children}</CardContent>
-    </Card>
+    <div className="glass-panel rounded-3xl border-slate-700/60 overflow-hidden">
+      <div className="flex items-center gap-2 px-6 py-5 border-b border-slate-700/70">
+        <Icon className="w-4 h-4 text-on-surface-variant" />
+        <h2 className="text-base font-semibold text-on-surface">{title}</h2>
+      </div>
+      <div className="p-6 space-y-5">{children}</div>
+    </div>
   )
 }
 
@@ -99,13 +92,11 @@ export default function DashboardSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<ToastMsg | null>(null)
 
-  // Notification toggles (derived from presence of values, editable locally)
   const [slackEnabled, setSlackEnabled] = useState(false)
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [testingSlack, setTestingSlack] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
 
-  // Danger zone
   const [clearingParts, setClearingParts] = useState(false)
   const [clearingAlerts, setClearingAlerts] = useState(false)
 
@@ -115,7 +106,6 @@ export default function DashboardSettingsPage() {
     setFetchState('loading')
     setErrorMessage('')
 
-    // Resolve the session first — getUser() is a network call and reliable
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user?.id) {
@@ -136,7 +126,6 @@ export default function DashboardSettingsPage() {
       return
     }
 
-    // Row doesn't exist yet — use session defaults so the page still renders
     if (!data) {
       const defaults: UserSettings = {
         id: user.id,
@@ -223,7 +212,6 @@ export default function DashboardSettingsPage() {
 
   async function testEmail() {
     if (!settings?.alert_email) return
-
     setTestingEmail(true)
     try {
       const response = await fetch('/api/test-email', {
@@ -231,12 +219,10 @@ export default function DashboardSettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: settings.alert_email }),
       })
-
       if (!response.ok) {
         const body = await response.json()
         throw new Error(body?.error || 'Email test failed')
       }
-
       setToast({ type: 'success', text: `Test email sent to ${settings.alert_email}.` })
     } catch (error) {
       setToast({ type: 'error', text: error instanceof Error ? error.message : 'Test email failed.' })
@@ -273,11 +259,10 @@ export default function DashboardSettingsPage() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   const isPaid = settings?.tier === 'paid'
-  const isLoading = fetchState === 'loading'
 
-  if (isLoading) {
+  if (fetchState === 'loading') {
     return (
-      <div className="flex items-center justify-center gap-3 py-24 text-muted-foreground">
+      <div className="flex items-center justify-center gap-3 py-24 text-on-surface-variant">
         <Loader2 className="w-5 h-5 animate-spin" />
         <span className="text-sm">Loading settings…</span>
       </div>
@@ -287,9 +272,9 @@ export default function DashboardSettingsPage() {
   if (fetchState === 'error') {
     return (
       <div className="flex flex-col items-center gap-3 py-24 text-center">
-        <AlertTriangle className="w-8 h-8 text-destructive" />
-        <p className="font-medium text-foreground">Failed to load settings</p>
-        <p className="text-sm text-muted-foreground">{errorMessage}</p>
+        <AlertTriangle className="w-8 h-8 text-red-400" />
+        <p className="font-medium text-on-surface">Failed to load settings</p>
+        <p className="text-sm text-on-surface-variant">{errorMessage}</p>
         <Button variant="outline" size="sm" onClick={fetchSettings} className="gap-2 mt-1">
           <RefreshCw className="w-4 h-4" /> Try again
         </Button>
@@ -301,58 +286,51 @@ export default function DashboardSettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      {/* ── Header ── */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account, notifications, and integrations.
-        </p>
+
+      {/* Header */}
+      <div className="glass-panel-elevated rounded-[2rem] border-slate-700/70 p-8">
+        <h1 className="text-3xl font-bold text-on-surface mb-1">Settings</h1>
+        <p className="text-on-surface-variant">Manage your account, notifications, and integrations.</p>
       </div>
 
-      {/* ── Account ── */}
+      {/* Account */}
       <Section icon={User} title="Account">
-        {/* Email */}
         <div className="space-y-1.5">
-          <Label className="text-sm text-muted-foreground">Email</Label>
-          <p className="text-foreground font-medium">{settings.email}</p>
+          <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Email</Label>
+          <p className="text-on-surface font-medium">{settings.email}</p>
         </div>
 
-        <Separator />
+        <Separator className="border-slate-700/70" />
 
-        {/* Tier */}
         <div className="flex items-center justify-between gap-4">
           <div>
-            <Label className="text-sm text-muted-foreground">Account tier</Label>
-            <div className="mt-1">
+            <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Account tier</Label>
+            <div className="mt-2">
               {isPaid ? (
-                <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400">
+                <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300">
                   Founding Member — $99/mo
-                </Badge>
+                </span>
               ) : (
-                <Badge variant="secondary">Free Trial</Badge>
+                <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-slate-700/50 text-on-surface-variant">
+                  Free Trial
+                </span>
               )}
             </div>
           </div>
           {!isPaid && (
-            <Button asChild size="sm" className="gap-2 shrink-0">
-              <a
-                href={process.env.NEXT_PUBLIC_STRIPE_LINK ?? '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Upgrade
-                <ExternalLink className="w-3.5 h-3.5" />
+            <Button asChild size="sm" className="gap-2 shrink-0 glass-button-primary rounded-2xl">
+              <a href={process.env.NEXT_PUBLIC_STRIPE_LINK ?? '#'} target="_blank" rel="noopener noreferrer">
+                Upgrade <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </Button>
           )}
         </div>
 
-        <Separator />
+        <Separator className="border-slate-700/70" />
 
-        {/* Monitoring frequency */}
         <div className="space-y-2">
-          <Label className="text-sm">Monitoring Frequency</Label>
-          <div className="flex flex-col gap-2">
+          <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Monitoring Frequency</Label>
+          <div className="flex flex-col gap-2 mt-2">
             {[
               { value: '24h', label: '24 hours', sublabel: 'Current plan', available: true },
               { value: '6h',  label: '6 hours',  sublabel: 'Founding Member only', available: isPaid },
@@ -362,23 +340,22 @@ export default function DashboardSettingsPage() {
                 disabled={!opt.available}
                 onClick={() => opt.available && updateField('monitoring_frequency', opt.value)}
                 className={`
-                  flex items-center justify-between px-4 py-3 rounded-lg border text-left
-                  transition-colors text-sm
+                  flex items-center justify-between px-4 py-3 rounded-2xl border text-left transition-colors text-sm
                   ${settings.monitoring_frequency === opt.value
-                    ? 'border-foreground bg-foreground/5'
-                    : 'border-border hover:border-foreground/30'
+                    ? 'border-primary/60 bg-primary-soft text-on-surface'
+                    : 'border-slate-700/60 hover:border-slate-600/80 text-on-surface-variant'
                   }
                   ${!opt.available ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
                 <div>
-                  <span className="font-medium text-foreground">{opt.label}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">{opt.sublabel}</span>
+                  <span className="font-medium text-on-surface">{opt.label}</span>
+                  <span className="ml-2 text-xs text-on-surface-variant">{opt.sublabel}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {!opt.available && <Lock className="w-3.5 h-3.5 text-muted-foreground" />}
+                  {!opt.available && <Lock className="w-3.5 h-3.5 text-on-surface-variant" />}
                   {settings.monitoring_frequency === opt.value && (
-                    <div className="w-2 h-2 rounded-full bg-foreground" />
+                    <div className="w-2 h-2 rounded-full bg-primary" />
                   )}
                 </div>
               </button>
@@ -387,16 +364,13 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      {/* ── Notifications ── */}
+      {/* Notifications */}
       <Section icon={Bell} title="Notifications">
-        {/* Slack */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-sm font-medium">Slack Webhook</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Post alerts to a Slack channel
-              </p>
+              <Label className="text-sm font-medium text-on-surface">Slack Webhook</Label>
+              <p className="text-xs text-on-surface-variant mt-0.5">Post alerts to a Slack channel</p>
             </div>
             <Switch checked={slackEnabled} onCheckedChange={setSlackEnabled} />
           </div>
@@ -406,35 +380,29 @@ export default function DashboardSettingsPage() {
                 placeholder="https://hooks.slack.com/services/…"
                 value={settings.slack_webhook ?? ''}
                 onChange={e => updateField('slack_webhook', e.target.value)}
-                className="font-mono text-sm"
+                className="glass-input rounded-2xl font-mono text-sm text-on-surface"
               />
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0 gap-1.5"
+                className="shrink-0 gap-1.5 rounded-2xl border-slate-700/60"
                 disabled={!settings.slack_webhook || testingSlack}
                 onClick={testSlack}
               >
-                {testingSlack
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Send className="w-3.5 h-3.5" />
-                }
+                {testingSlack ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 Test
               </Button>
             </div>
           )}
         </div>
 
-        <Separator />
+        <Separator className="border-slate-700/70" />
 
-        {/* Email */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-sm font-medium">Alert Email</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Receive alerts by email
-              </p>
+              <Label className="text-sm font-medium text-on-surface">Alert Email</Label>
+              <p className="text-xs text-on-surface-variant mt-0.5">Receive alerts by email</p>
             </div>
             <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} />
           </div>
@@ -445,18 +413,16 @@ export default function DashboardSettingsPage() {
                 placeholder="alerts@yourcompany.com"
                 value={settings.alert_email ?? ''}
                 onChange={e => updateField('alert_email', e.target.value)}
+                className="glass-input rounded-2xl text-on-surface"
               />
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0 gap-1.5"
+                className="shrink-0 gap-1.5 rounded-2xl border-slate-700/60"
                 disabled={!settings.alert_email || testingEmail}
                 onClick={testEmail}
               >
-                {testingEmail
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Send className="w-3.5 h-3.5" />
-                }
+                {testingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 Test
               </Button>
             </div>
@@ -464,9 +430,9 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      {/* ── Suppliers ── */}
+      {/* Suppliers */}
       <Section icon={Package} title="Preferred Suppliers">
-        <p className="text-sm text-muted-foreground -mt-1">
+        <p className="text-sm text-on-surface-variant -mt-1">
           OmniProcure will prioritise these suppliers when sourcing quotes.
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -477,19 +443,14 @@ export default function DashboardSettingsPage() {
                 key={supplier}
                 onClick={() => toggleSupplier(supplier)}
                 className={`
-                  flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-sm
-                  transition-colors text-left
+                  flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border text-sm transition-colors text-left
                   ${checked
-                    ? 'border-foreground bg-foreground/5 text-foreground font-medium'
-                    : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                    ? 'border-primary/60 bg-primary-soft text-on-surface font-medium'
+                    : 'border-slate-700/60 text-on-surface-variant hover:border-slate-600/80 hover:text-on-surface'
                   }
                 `}
               >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => toggleSupplier(supplier)}
-                  className="pointer-events-none"
-                />
+                <Checkbox checked={checked} onCheckedChange={() => toggleSupplier(supplier)} className="pointer-events-none" />
                 {supplier}
               </button>
             )
@@ -497,9 +458,9 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      {/* ── Save ── */}
+      {/* Save */}
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-32">
+        <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-32 glass-button-primary rounded-2xl">
           {saving
             ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
             : <><Save className="w-4 h-4" /> Save Settings</>
@@ -507,104 +468,72 @@ export default function DashboardSettingsPage() {
         </Button>
       </div>
 
-      {/* ── Danger Zone ── */}
+      {/* Danger Zone */}
       <Section icon={Shield} title="Danger Zone">
-        <p className="text-sm text-muted-foreground -mt-1">
+        <p className="text-sm text-on-surface-variant -mt-1">
           These actions are permanent and cannot be undone.
         </p>
-
         <div className="space-y-3">
-          {/* Clear monitored parts */}
-          <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5">
-            <div>
-              <p className="text-sm font-medium text-foreground">Clear all monitored parts</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Removes all parts from your monitoring list.
-              </p>
-            </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
-                  disabled={clearingParts}
-                >
-                  {clearingParts
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <Trash2 className="w-3.5 h-3.5" />
-                  }
-                  Clear parts
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Clear all monitored parts?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete every part from your monitoring list.
-                    You'll need to re-upload a BOM to start monitoring again.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={clearMonitoredParts}
+          {[
+            {
+              label: 'Clear all monitored parts',
+              desc: 'Removes all parts from your monitoring list.',
+              loading: clearingParts,
+              action: clearMonitoredParts,
+              confirmTitle: 'Clear all monitored parts?',
+              confirmDesc: "This will permanently delete every part from your monitoring list. You'll need to re-upload a BOM to start monitoring again.",
+              confirmText: 'Yes, clear all parts',
+              btnText: 'Clear parts',
+            },
+            {
+              label: 'Clear all alerts',
+              desc: 'Dismisses every alert in your alerts inbox.',
+              loading: clearingAlerts,
+              action: clearAlerts,
+              confirmTitle: 'Clear all alerts?',
+              confirmDesc: 'This will permanently delete all alerts. New alerts will still be generated on your next monitoring run.',
+              confirmText: 'Yes, clear all alerts',
+              btnText: 'Clear alerts',
+            },
+          ].map(item => (
+            <div key={item.label} className="flex items-center justify-between p-4 rounded-2xl border border-red-500/20 bg-red-500/5">
+              <div>
+                <p className="text-sm font-medium text-on-surface">{item.label}</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5 rounded-2xl border-red-500/40 text-red-400 hover:bg-red-500/10"
+                    disabled={item.loading}
                   >
-                    Yes, clear all parts
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-
-          {/* Clear alerts */}
-          <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5">
-            <div>
-              <p className="text-sm font-medium text-foreground">Clear all alerts</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Dismisses every alert in your alerts inbox.
-              </p>
+                    {item.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    {item.btnText}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{item.confirmTitle}</AlertDialogTitle>
+                    <AlertDialogDescription>{item.confirmDesc}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={item.action}
+                    >
+                      {item.confirmText}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
-                  disabled={clearingAlerts}
-                >
-                  {clearingAlerts
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <Trash2 className="w-3.5 h-3.5" />
-                  }
-                  Clear alerts
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Clear all alerts?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete all alerts. New alerts will still
-                    be generated on your next monitoring run.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={clearAlerts}
-                  >
-                    Yes, clear all alerts
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+          ))}
         </div>
       </Section>
 
-      {/* ── Toast ── */}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   )
