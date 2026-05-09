@@ -1,11 +1,5 @@
 /**
  * /api/request-po/[id]
- * ─────────────────────────────────────────────────────────────────────────────
- * GET    → current status of one HITL request
- * PATCH  → approve / reject / modify  { decision: "approved"|"rejected"|"modified", note?: string }
- *
- * On approval: Claude generates PO text → saved to po_history table
- * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,9 +8,8 @@ import {
   updateHitlStatus,
   generatePoText,
   logAuditEvent,
-  notifyPoApproved,
-  notifyPoPending,
 } from "@/lib/procurement";
+import { notifyPoApproved } from "@/lib/notify";
 
 export const maxDuration = 45;
 
@@ -30,12 +23,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ success: true, request: data });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
-    await notifyPoApproved({
-      poNumber: data.po_number,
-      mpn: hitlRequest.mpn,
-      supplier: hitlRequest.supplier,
-      totalValue: hitlRequest.total_value,
-      hitlId: id,
   }
 }
 
@@ -50,7 +37,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "decision must be approved, rejected, or modified" }, { status: 400 });
   }
 
-  // Fetch the original request
   const { data: hitl, error } = await supabaseAdmin
     .from("hitl_queue").select("*").eq("id", id).single();
   if (error || !hitl) return NextResponse.json({ error: "HITL request not found" }, { status: 404 });
@@ -58,10 +44,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: `Already ${hitl.status}` }, { status: 409 });
   }
 
-  // Update HITL queue
   await updateHitlStatus(id, decision, note);
 
-  // Audit log
   await logAuditEvent({
     action: `hitl_${decision}`,
     supplier: hitl.supplier,
@@ -72,7 +56,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     details: { hitlId: id, note, action: hitl.action },
   });
 
-  // If approved or modified → generate PO
   if (decision === "approved" || decision === "modified") {
     try {
       const poText = await generatePoText({
@@ -99,6 +82,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         generated_at: new Date().toISOString(),
       });
 
+      // ✅ Notify Slack + email after PO approved
+      await notifyPoApproved({
+        poNumber,
+        mpn: hitl.mpn,
+        supplier: hitl.supplier,
+        totalValue: hitl.total_value,
+        hitlId: id,
+      });
+
       return NextResponse.json({
         success: true,
         decision,
@@ -111,11 +103,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({
         success: true,
         decision,
-        warning: "Decision recorded but PO generation failed. Retry via /api/request-po/[id]/generate-po",
+        warning: "Decision recorded but PO generation failed.",
       });
     }
   }
 
-  // Rejected
   return NextResponse.json({ success: true, decision, message: "Request rejected and logged." });
 }

@@ -1,8 +1,5 @@
 /**
  * POST /api/monitor
- * ─────────────────────────────────────────────────────────────────────────────
- * Fetches live price + stock data, analyses with Claude, saves alerts.
- * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -12,8 +9,8 @@ import {
   logAuditEvent,
   supabaseAdmin,
   SupplierResult,
-  notifyAlert,
 } from "@/lib/procurement";
+import { notifyAlert } from "@/lib/notify";
 
 export const maxDuration = 60;
 
@@ -40,12 +37,6 @@ export async function PUT(req: NextRequest) {
       { onConflict: "mpn" }
     );
     return NextResponse.json({ success: true, message: `${mpn} added to watchlist` });
-    await notifyAlert({
-      mpn: flaggedMpn,
-      urgency: analysis.urgency,
-      summary: analysis.summary,
-      recommendation: analysis.recommendation ?? 'hold',
-    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
@@ -73,7 +64,6 @@ export async function POST(req: NextRequest) {
     mpns = (data ?? []).map((r: { mpn: string }) => r.mpn);
   }
 
-  // Also pull from monitored_parts if watchlist is empty
   if (!mpns.length) {
     const { data } = await supabaseAdmin
       .from("monitored_parts")
@@ -125,10 +115,8 @@ export async function POST(req: NextRequest) {
         };
       });
 
-    // Claude analysis
     const analysis = await analyzeMarketData(allSuppliers);
 
-    // ✅ Save alerts to Supabase if Claude flagged anything
     const savedAlerts: any[] = [];
     if (analysis?.alert && analysis.flaggedParts?.length) {
       for (const flaggedMpn of analysis.flaggedParts) {
@@ -147,17 +135,24 @@ export async function POST(req: NextRequest) {
             .select()
             .single();
 
-          if (alertData) savedAlerts.push(alertData);
+          if (alertData) {
+            savedAlerts.push(alertData);
+            // ✅ Notify after saving alert
+            await notifyAlert({
+              mpn: flaggedMpn,
+              urgency: analysis.urgency,
+              summary: analysis.summary,
+              recommendation: analysis.recommendation ?? 'hold',
+            });
+          }
         } catch (e: any) {
           console.error(`[Monitor] Failed to save alert for ${flaggedMpn}:`, e?.message);
         }
       }
     }
 
-    // ✅ Also auto-alert any part with zero stock across all suppliers
     for (const part of partSummaries) {
       if (part.status === "out_of_stock") {
-        // Avoid duplicate alerts — check if one exists in last 24h
         const { data: existing } = await supabaseAdmin
           .from("alerts")
           .select("id")
@@ -175,11 +170,17 @@ export async function POST(req: NextRequest) {
             is_read: false,
             created_at: new Date().toISOString(),
           });
+          // ✅ Notify for out of stock
+          await notifyAlert({
+            mpn: part.mpn,
+            urgency: 'high',
+            summary: `${part.mpn} has zero stock across all suppliers.`,
+            recommendation: 'buy_now',
+          });
         }
       }
     }
 
-    // Update last_checked_at
     await Promise.allSettled(
       mpns.map(mpn =>
         supabaseAdmin

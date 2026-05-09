@@ -1,16 +1,5 @@
 /**
  * POST /api/request-po
- * ─────────────────────────────────────────────────────────────────────────────
- * Stages a PO request to the HITL queue in Supabase.
- * The UI polls /api/request-po/[id] for status.
- * On approval → generates PO text with Claude → saves to po_history.
- *
- * Body: HitlRequest payload (supplier, mpn, price, moq, etc.)
- *
- * GET /api/request-po/[id]        → get status of one request
- * GET /api/request-po             → list all pending requests
- * PATCH /api/request-po/[id]      → approve / reject / modify
- * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,10 +8,9 @@ import {
   getPendingHitlRequests,
   getAllHitlRequests,
   logAuditEvent,
-  notifyPoApproved,
-  notifyPoPending,
   HitlRequest,
 } from "@/lib/procurement";
+import { notifyPoPending } from "@/lib/notify";
 
 export const maxDuration = 30;
 
@@ -41,12 +29,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "supplier and mpn are required" }, { status: 400 });
   }
 
-  await notifyPoPending({
-    mpn, supplier,
-    totalValue: total_value ?? price * moq,
-    hitlId: id,
-    aiRecommendation,
-  });
   const id = `hitl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const computedTotal = totalValue ?? ((price ?? 0) * moq);
 
@@ -59,7 +41,15 @@ export async function POST(req: NextRequest) {
 
   await createHitlRequest(hitlReq);
 
-  // Audit: request staged
+  // ✅ Notify Slack after creating HITL request
+  await notifyPoPending({
+    mpn,
+    supplier,
+    totalValue: computedTotal,
+    hitlId: id,
+    aiRecommendation,
+  });
+
   await logAuditEvent({
     action: `hitl_staged_${action}`,
     supplier, mpn,
@@ -73,7 +63,7 @@ export async function POST(req: NextRequest) {
     success: true,
     id,
     status: "pending",
-    message: "PO request staged for human approval. Poll /api/request-po/${id} for status.",
+    message: `PO request staged for human approval. Poll /api/request-po/${id} for status.`,
   });
 }
 
