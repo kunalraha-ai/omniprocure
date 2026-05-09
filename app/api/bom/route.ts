@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
               .upsert(monitoredPayload, { onConflict: 'mpn' });
             if (upsertError) console.error('[BOM] monitored_parts upsert failed:', upsertError);
             else console.log('[BOM] monitored_parts saved:', monitoredPayload.length);
+            console.log('[BOM] Full error object from monitored_parts upsert:', upsertError);
           }
         } catch (e: any) {
           console.error('[BOM] Supabase save failed:', e?.message);
