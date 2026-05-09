@@ -114,11 +114,15 @@ export async function POST(req: NextRequest) {
             }));
 
           if (monitoredPayload.length > 0) {
-            await supabaseAdmin
+            const { error: upsertError } = await supabaseAdmin
               .from('monitored_parts')
               .upsert(monitoredPayload, { onConflict: 'mpn' });
+            if (upsertError) console.error('[BOM] monitored_parts upsert failed:', upsertError);
+            else console.log('[BOM] monitored_parts saved:', monitoredPayload.length);
           }
-        } catch {}
+        } catch (e: any) {
+          console.error('[BOM] Supabase save failed:', e?.message);
+        }
 
         await logAuditEvent({
           action: "bom_upload",
