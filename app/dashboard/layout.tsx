@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 const NAV_ITEMS = [
   { label: "Overview",  href: "/dashboard",          icon: "dashboard" },
   { label: "BOM Upload", href: "/dashboard/bom",     icon: "document_scanner" },
+  { label: "Chat", href: "/dashboard/chat", icon: "smart_toy" },
   { label: "Monitor",   href: "/dashboard/monitor",  icon: "satellite_alt" },
   { label: "Orders",    href: "/dashboard/orders",   icon: "shopping_cart" },
   { label: "Alerts",    href: "/dashboard/alerts",   icon: "notifications_active" },
