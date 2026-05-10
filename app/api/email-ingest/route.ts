@@ -91,7 +91,7 @@ async function parseQuoteWithClaude(subject: string, from: string, body: string)
       messages: [
         {
           role: "user",
-          content: `You are a procurement assistant. Extract structured quote data from this supplier email.
+         content: `You are a procurement assistant. Extract structured quote data from this supplier email.
 
 From: ${from}
 Subject: ${subject}
@@ -100,19 +100,20 @@ ${body}
 
 Respond ONLY with a JSON object (no markdown, no explanation):
 {
-  "supplier_name": "string",
-  "supplier_email": "string",
+  "supplier_name": "string or null",
+  "supplier_email": "string or null",
   "mpn": "string or null",
   "part_description": "string or null",
   "unit_price": number or null,
-  "currency": "USD" or other,
+  "currency": "USD",
   "moq": number or null,
   "lead_time_days": number or null,
   "notes": "string or null",
   "is_quote": true or false
 }
 
-If this is not a supplier quote email, set is_quote to false and other fields to null.`,
+Set is_quote to TRUE if the email mentions any of: a price, a part number, a quantity, a lead time, or appears to be from a supplier or vendor. Be generous — when in doubt, set is_quote to true.
+Only set is_quote to false for clearly unrelated emails like newsletters, login alerts, or spam.`,
         },
       ],
     }),
