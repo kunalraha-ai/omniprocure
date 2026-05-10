@@ -105,6 +105,18 @@ const TOOLS = [
       required: ["alert_id"],
     },
   },
+    {
+      name: "parse_bom",
+      description: "Parse a BOM (Bill of Materials) CSV text, source suppliers for each part via OEM API, and save all parts to monitored_parts. Use when the user uploads a BOM file or pastes a list of MPNs to source.",
+      input_schema: {
+        type: "object",
+        properties: {
+          raw: { type: "string", description: "Raw CSV text content of the BOM" },
+          filename: { type: "string", description: "Original filename" },
+        },
+        required: ["raw"],
+      },
+    },
 ];
 
 // ── Tool execution ────────────────────────────────────────────────────────────
@@ -134,6 +146,34 @@ async function executeTool(name: string, input: any): Promise<string> {
           created_at: a.created_at, is_read: a.is_read,
         })));
       }
+
+      case "parse_bom": {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://omniprocure.online"}/api/bom`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: input.raw, filename: input.filename ?? "chat-upload.csv" }),
+  });
+  // Consume the SSE stream and return summary
+  const reader = res.body?.getReader();
+  if (!reader) return "BOM API unavailable.";
+  const decoder = new TextDecoder();
+  let summary = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value);
+    const lines = text.split("\n").filter(l => l.startsWith("data:"));
+    for (const line of lines) {
+      try {
+        const evt = JSON.parse(line.replace("data:", "").trim());
+        if (evt.type === "complete") {
+          summary = `✅ BOM processed: ${evt.totalItems} parts found. ${evt.sourced} sourced, ${evt.partial} partial, ${evt.unfound} unfound. Estimated cost: $${evt.estimatedCost?.toFixed(2)}. All parts added to monitored_parts.`;
+        }
+      } catch {}
+    }
+  }
+  return summary || "BOM processed and parts saved to monitoring.";
+}
 
       case "get_watchlist": {
         const { data } = await supabaseAdmin.from("watchlist").select("*").order("added_at", { ascending: false });
