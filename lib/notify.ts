@@ -10,7 +10,7 @@
 
 const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK_URL;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const NOTIFY_EMAIL = 'yhwach149@gmail.com';
+const NOTIFY_EMAIL = 'yhwach149@gmail.com'; // fallback if no alert_email set
 const FROM_EMAIL = 'onboarding@resend.dev';
 const APP_URL = 'https://omniprocure.online';
 
@@ -34,7 +34,7 @@ async function sendSlack(blocks: object[], text: string): Promise<void> {
 }
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
-async function sendEmail(subject: string, html: string): Promise<void> {
+async function sendEmail(subject: string, html: string, to?: string): Promise<void> {
   if (!RESEND_API_KEY) {
     console.warn('[Notify] RESEND_API_KEY not set — skipping email');
     return;
@@ -48,13 +48,13 @@ async function sendEmail(subject: string, html: string): Promise<void> {
       },
       body: JSON.stringify({
         from: FROM_EMAIL,
-        to: NOTIFY_EMAIL,
+        to: to ?? NOTIFY_EMAIL,
         subject,
         html,
       }),
     });
     if (!res.ok) console.error('[Notify] Email error:', res.status, await res.text());
-    else console.log('[Notify] Email sent ✓');
+    else console.log('[Notify] Email sent ✓ to', to ?? NOTIFY_EMAIL);
   } catch (e: any) {
     console.error('[Notify] Email failed:', e?.message);
   }
@@ -66,8 +66,9 @@ export async function notifyAlert(params: {
   urgency: 'low' | 'medium' | 'high' | 'none';
   summary: string;
   recommendation: string;
+  alertEmail?: string;
 }): Promise<void> {
-  const { mpn, urgency, summary, recommendation } = params;
+  const { mpn, urgency, summary, recommendation, alertEmail } = params;
 
   const urgencyEmoji = urgency === 'high' ? '🔴' : urgency === 'medium' ? '🟡' : '🟢';
   const urgencyLabel = urgency.toUpperCase();
@@ -124,7 +125,8 @@ export async function notifyAlert(params: {
         <a href="${APP_URL}/dashboard/alerts" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #7dd3fc; color: #0f1524; border-radius: 8px; text-decoration: none; font-weight: bold;">View Alerts →</a>
       </div>
     </div>
-    `
+    `,
+    alertEmail
   );
 }
 
@@ -135,8 +137,9 @@ export async function notifyPoApproved(params: {
   supplier: string;
   totalValue: number;
   hitlId: string;
+  alertEmail?: string;
 }): Promise<void> {
-  const { poNumber, mpn, supplier, totalValue, hitlId } = params;
+  const { poNumber, mpn, supplier, totalValue, alertEmail } = params;
 
   // Slack
   await sendSlack([
@@ -182,7 +185,8 @@ export async function notifyPoApproved(params: {
         <a href="${APP_URL}/dashboard/orders" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #7dd3fc; color: #0f1524; border-radius: 8px; text-decoration: none; font-weight: bold;">View Order →</a>
       </div>
     </div>
-    `
+    `,
+    alertEmail
   );
 }
 
@@ -193,8 +197,9 @@ export async function notifyPoPending(params: {
   totalValue: number;
   hitlId: string;
   aiRecommendation?: string;
+  alertEmail?: string;
 }): Promise<void> {
-  const { mpn, supplier, totalValue, hitlId, aiRecommendation } = params;
+  const { mpn, supplier, totalValue, aiRecommendation, alertEmail } = params;
 
   await sendSlack([
     {
@@ -222,4 +227,24 @@ export async function notifyPoPending(params: {
       ],
     },
   ], `⏳ PO pending approval for ${mpn} from ${supplier} — $${totalValue.toFixed(2)}`);
+
+  // Email
+  await sendEmail(
+    `⏳ PO Pending Approval — ${mpn}`,
+    `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #0f1524; padding: 24px; border-radius: 12px; border-left: 4px solid #fac775;">
+        <h2 style="color: #e0e8f0; margin: 0 0 16px;">⏳ PO Awaiting Your Approval</h2>
+        <table style="width: 100%; color: #a0b4c4; font-size: 14px;">
+          <tr><td style="padding: 6px 0; color: #7dd3fc; font-weight: bold;">MPN</td><td>${mpn}</td></tr>
+          <tr><td style="padding: 6px 0; color: #7dd3fc; font-weight: bold;">Supplier</td><td>${supplier}</td></tr>
+          <tr><td style="padding: 6px 0; color: #7dd3fc; font-weight: bold;">Total Value</td><td>$${totalValue.toFixed(2)}</td></tr>
+          <tr><td style="padding: 6px 0; color: #7dd3fc; font-weight: bold;">AI Recommendation</td><td>${aiRecommendation ?? 'Review required'}</td></tr>
+        </table>
+        <a href="${APP_URL}/dashboard/orders" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #7dd3fc; color: #0f1524; border-radius: 8px; text-decoration: none; font-weight: bold;">Review & Approve →</a>
+      </div>
+    </div>
+    `,
+    alertEmail
+  );
 }
