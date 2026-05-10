@@ -18,8 +18,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { supabase } from '@/lib/supabase'
 
-const DEFAULT_USER_ID = 'default-user'
-
 type Tier = 'free' | 'paid'
 
 interface UserSettings {
@@ -32,7 +30,6 @@ interface UserSettings {
 }
 
 type FetchState = 'idle' | 'loading' | 'success' | 'error'
-
 interface ToastMsg { type: 'success' | 'error'; text: string }
 
 function Toast({ toast, onDismiss }: { toast: ToastMsg; onDismiss: () => void }) {
@@ -78,10 +75,16 @@ export default function DashboardSettingsPage() {
   const fetchSettings = useCallback(async () => {
     setFetchState('loading')
 
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      setFetchState('error')
+      return
+    }
+
     const { data, error } = await supabase
       .from('users')
       .select('id, email, tier, monitoring_frequency, slack_webhook, alert_email')
-      .eq('id', DEFAULT_USER_ID)
+      .eq('id', user.id)
       .maybeSingle()
 
     if (error) {
@@ -90,23 +93,18 @@ export default function DashboardSettingsPage() {
     }
 
     if (!data) {
-      // Create default row if it doesn't exist
-      await supabase.from('users').insert({
-        id: DEFAULT_USER_ID,
-        email: 'yhwach149@gmail.com',
+      // First login — auto-create row for this user
+      const newUser: UserSettings = {
+        id: user.id,
+        email: user.email ?? '',
         tier: 'free',
         monitoring_frequency: '24h',
         slack_webhook: null,
-        alert_email: null,
-      })
-      setSettings({
-        id: DEFAULT_USER_ID,
-        email: 'yhwach149@gmail.com',
-        tier: 'free',
-        monitoring_frequency: '24h',
-        slack_webhook: null,
-        alert_email: null,
-      })
+        alert_email: user.email ?? null,
+      }
+      await supabase.from('users').insert(newUser)
+      setSettings(newUser)
+      setEmailEnabled(!!newUser.alert_email)
       setFetchState('success')
       return
     }
@@ -133,7 +131,7 @@ export default function DashboardSettingsPage() {
         slack_webhook: slackEnabled ? settings.slack_webhook : null,
         alert_email: emailEnabled ? settings.alert_email : null,
       })
-      .eq('id', DEFAULT_USER_ID)
+      .eq('id', settings.id)
     setSaving(false)
     setToast(error
       ? { type: 'error', text: `Save failed: ${error.message}` }
@@ -224,13 +222,11 @@ export default function DashboardSettingsPage() {
   return (
     <div className="space-y-6 max-w-2xl">
 
-      {/* Header */}
       <div className="glass-panel-elevated rounded-[2rem] border-slate-700/70 p-8">
         <h1 className="text-3xl font-bold text-on-surface mb-1">Settings</h1>
         <p className="text-on-surface-variant">Manage your account, notifications, and integrations.</p>
       </div>
 
-      {/* Account */}
       <Section icon={User} title="Account">
         <div className="space-y-1.5">
           <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Email</Label>
@@ -296,7 +292,6 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      {/* Notifications */}
       <Section icon={Bell} title="Notifications">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -352,7 +347,6 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      {/* Save */}
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-32 glass-button-primary rounded-2xl">
           {saving
@@ -361,7 +355,6 @@ export default function DashboardSettingsPage() {
         </Button>
       </div>
 
-      {/* Danger Zone */}
       <Section icon={Shield} title="Danger Zone">
         <p className="text-sm text-on-surface-variant -mt-1">These actions are permanent and cannot be undone.</p>
         <div className="space-y-3">
