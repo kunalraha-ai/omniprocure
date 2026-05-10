@@ -9,7 +9,6 @@ const NAV_ITEMS = [
   { label: "Overview",  href: "/dashboard",          icon: "dashboard" },
   { label: "Chat", href: "/dashboard/chat", icon: "smart_toy" },
   { label: "Monitor",   href: "/dashboard/monitor",  icon: "satellite_alt" },
-  { label: "Orders",    href: "/dashboard/orders",   icon: "shopping_cart" },
   { label: "Alerts",    href: "/dashboard/alerts",   icon: "notifications_active" },
   { label: "Settings",  href: "/dashboard/settings", icon: "settings" },
 ];
