@@ -470,22 +470,41 @@ Payment due within 30 days of invoice receipt.`;
 
 // ── Price / stock monitor ─────────────────────────────────────────────────────
 export async function analyzeMarketData(stockData: SupplierResult[]) {
+  // Group by MPN so Claude can reason per-part
+  const byMpn: Record<string, SupplierResult[]> = {};
+  for (const s of stockData) {
+    if (!s.mpn) continue;
+    if (!byMpn[s.mpn]) byMpn[s.mpn] = [];
+    byMpn[s.mpn].push(s);
+  }
+
+  const partSummaries = Object.entries(byMpn).map(([mpn, suppliers]) => {
+    const inStock = suppliers.filter(s => s.stock > 0);
+    const totalStock = inStock.reduce((sum, s) => sum + s.stock, 0);
+    const bestPrice = inStock.sort((a, b) => (a.price ?? 9999) - (b.price ?? 9999))[0]?.price ?? null;
+    return { mpn, totalStock, supplierCount: inStock.length, bestPrice };
+  });
+
   return claudeJson<{
     alert: boolean; urgency: "none" | "low" | "medium" | "high";
     summary: string; recommendation: "buy_now" | "watch" | "hold";
     flaggedParts: string[];
   }>(
-    `You are a procurement analyst monitoring electronic parts market data.
-Analyze this live supplier data and flag any issues:
-1. Stock dropping below 100 units for any part
-2. Lead times exceeding 8 weeks
-3. Any part with zero stock across all suppliers
+    `You are a procurement analyst. Analyze this component stock data and flag any issues.
 
-Data: ${JSON.stringify(stockData.slice(0, 20))}
+Flag a part if ANY of these are true:
+- totalStock below 500 units
+- supplierCount is 0 or 1 (single source risk)
+- bestPrice is null (no pricing available)
 
-Respond ONLY with raw JSON (no markdown, no explanation):
-{"alert":false,"urgency":"none","summary":"All clear","recommendation":"hold","flaggedParts":[]}`,
-    400
+Parts data:
+${JSON.stringify(partSummaries)}
+
+Respond ONLY with raw JSON:
+{"alert":false,"urgency":"none","summary":"All clear","recommendation":"hold","flaggedParts":[]}
+
+If flagging, set alert:true, pick urgency (low/medium/high), write a 1-sentence summary, and list the affected MPNs in flaggedParts.`,
+    600
   );
 }
 
