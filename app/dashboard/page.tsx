@@ -1,32 +1,24 @@
 ﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { AlertTriangle, AlertCircle, ShoppingCart, Zap, TrendingUp, TrendingDown } from 'lucide-react'
+import { AlertTriangle, AlertCircle, ShoppingCart, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 function StatsCard({
   label,
   value,
   icon,
-  trend,
   subtitle,
 }: {
   label: string
   value: string | number
   icon: React.ReactNode
-  trend?: 'up' | 'down'
   subtitle?: string
 }) {
   return (
     <div className="glass-panel rounded-3xl p-6 hover:border-slate-600/60 transition-colors">
       <div className="flex items-start justify-between mb-4">
         <div>{icon}</div>
-        {trend && (
-          <div className={`flex items-center gap-1 text-xs font-medium ${trend === 'up' ? 'text-green-400' : 'text-on-surface-variant'}`}>
-            {trend === 'up' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-            {trend === 'up' ? '+12%' : '-4%'}
-          </div>
-        )}
       </div>
       <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant mb-2">{label}</p>
       <p className="text-3xl font-semibold text-on-surface mb-1">{value}</p>
@@ -61,6 +53,7 @@ export default function DashboardPage() {
         const { data: monitoredData } = await supabase
           .from('monitored_parts')
           .select('*')
+          .order('created_at', { ascending: false })
           .limit(5)
 
         const { count: partsCount } = await supabase
@@ -75,7 +68,7 @@ export default function DashboardPage() {
         const { count: ordersCount } = await supabase
           .from('orders')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending')
+          .eq('status', 'pending_review')
 
         const { data: apiData } = await supabase
           .from('api_usage')
@@ -136,14 +129,12 @@ export default function DashboardPage() {
           label="Monitored Components"
           value={stats.monitored}
           icon={<Zap className="w-5 h-5 text-indigo-400" />}
-          trend="up"
           subtitle="Across all BOMs"
         />
         <StatsCard
           label="Active Alerts"
           value={stats.activeAlerts}
           icon={<AlertCircle className="w-5 h-5 text-orange-400" />}
-          trend="down"
           subtitle="Requires action"
         />
         <StatsCard

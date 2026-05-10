@@ -142,12 +142,17 @@ async function executeTool(name: string, input: any): Promise<string> {
       }
 
       case "add_to_watchlist": {
-        await supabaseAdmin.from("watchlist").upsert(
-          { mpn: input.mpn.toUpperCase(), label: input.label ?? input.mpn, added_at: new Date().toISOString() },
-          { onConflict: "mpn" }
-        );
-        return `✅ ${input.mpn.toUpperCase()} added to watchlist. It will be monitored in the next check.`;
-      }
+  const mpn = input.mpn.toUpperCase();
+  await supabaseAdmin.from("watchlist").upsert(
+    { mpn, label: input.label ?? mpn, added_at: new Date().toISOString() },
+    { onConflict: "mpn" }
+  );
+  await supabaseAdmin.from("monitored_parts").upsert(
+    { mpn, part_name: input.label ?? mpn, quantity: 1, is_active: true, created_at: new Date().toISOString() },
+    { onConflict: "mpn" }
+  );
+  return `✅ ${mpn} added to watchlist and monitoring. It will appear on your Monitor page.`;
+}
 
       case "get_monitored_parts": {
         const { data } = await supabaseAdmin
