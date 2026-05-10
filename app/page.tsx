@@ -2,12 +2,16 @@ import Link from "next/link";
 
 export default function Page() {
   return (
-    <div className="min-h-screen flex flex-col relative overflow-x-hidden" style={{ background: "#0a0e1a", color: "#e0e8f0", fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-screen flex flex-col relative overflow-x-hidden" style={{ 
+      background: "radial-gradient(circle at top left, rgba(125,211,252,0.05) 0%, #0a0e1a 50%), radial-gradient(circle at bottom right, rgba(200,160,240,0.05) 0%, #0a0e1a 50%), #0a0e1a",
+      color: "#e0e8f0", 
+      fontFamily: "'Inter', sans-serif" 
+    }}>
 
       {/* Ambient Background */}
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px]" style={{ background: "rgba(125,211,252,0.05)" }} />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[120px]" style={{ background: "rgba(200,160,240,0.05)" }} />
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px]" style={{ background: "rgba(125,211,252,0.12)" }} />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[120px]" style={{ background: "rgba(200,160,240,0.12)" }} />
       </div>
 
       {/* Nav */}
