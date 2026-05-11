@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     const fetchResults = await Promise.allSettled(
       mpns.map(async (mpn) => ({
         mpn,
-        suppliers: await fetchOemSecrets(mpn),
+        suppliers: await fetchOemSecrets(mpn, "cron"),
       }))
     );
 

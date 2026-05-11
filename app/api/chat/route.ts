@@ -133,7 +133,7 @@ async function executeTool(name: string, input: any): Promise<string> {
   try {
     switch (name) {
       case "query_stock": {
-        const suppliers = await fetchOemSecrets(input.mpn);
+        const suppliers = await fetchOemSecrets(input.mpn, "chat");
         if (!suppliers.length) return `No stock data found for ${input.mpn}.`;
         const inStock = suppliers.filter(s => s.stock > 0);
         const summary = suppliers.slice(0, 6).map(s =>

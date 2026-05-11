@@ -70,11 +70,11 @@ export default function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('status', 'pending_review')
 
-        const { data: apiData } = await supabase
-          .from('api_usage')
-          .select('calls_today')
-          .limit(1)
-          .maybeSingle()
+        const today = new Date().toISOString().split('T')[0]
+        const { count: apiCallCount } = await supabase
+           .from('api_call_log')
+           .select('*', { count: 'exact', head: true })
+           .gte('called_at', today)
 
         setAlerts(alertsData || [])
         setMonitored(monitoredData || [])
@@ -82,7 +82,7 @@ export default function DashboardPage() {
           monitored: partsCount || 0,
           activeAlerts: alertCount || 0,
           pendingPOs: ordersCount || 0,
-          apiCalls: apiData?.calls_today || 0
+          apiCalls: apiCallCount || 0
         })
       } catch (err) {
         setError('Failed to load dashboard data')

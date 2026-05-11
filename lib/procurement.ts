@@ -203,14 +203,29 @@ function deduplicateBySupplier(results: SupplierResult[]): SupplierResult[] {
   return Array.from(map.values());
 }
 
+// ── API Call Logger ───────────────────────────────────────────────────────────
+export async function logApiCall(mpn: string, source: string) {
+  try {
+    await supabaseAdmin.from("api_call_log").insert({
+      mpn: mpn.toUpperCase(),
+      source,
+      called_at: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    console.error("[ApiLog] Failed:", e?.message);
+  }
+}
+
 // ── OEM Secrets ───────────────────────────────────────────────────────────────
-export async function fetchOemSecrets(mpn: string): Promise<SupplierResult[]> {
+export async function fetchOemSecrets(mpn: string, source = "unknown"): Promise<SupplierResult[]> {
   const apiKey = process.env.OEM_SECRETS_API_KEY!;
   const url = `https://oemsecretsapi.com/partsearch?apiKey=${apiKey}&searchTerm=${encodeURIComponent(mpn)}&currency=USD`;
   const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
   if (!res.ok) throw new Error(`OEM Secrets API error: ${res.status}`);
   const data: OemSecretsResponse = await res.json();
   if (!data.stock?.length) return [];
+  // Log this API call (fire and forget)
+  logApiCall(mpn, source).catch(() => {});
   const mapped = data.stock.map(item => mapToSupplierResult(item, mpn));
   const deduped = deduplicateBySupplier(mapped);
   return deduped.sort((a, b) => {
@@ -246,7 +261,7 @@ export async function fetchVariants(mpn: string): Promise<VariantResult[]> {
   if (!candidates.length) return [];
   const settled = await Promise.allSettled(
     candidates.map(async ({ variantMpn, packageDesc }) => ({
-      variantMpn, packageDesc, suppliers: await fetchOemSecrets(variantMpn),
+      variantMpn, packageDesc, suppliers: await fetchOemSecrets(variantMpn, "variants"),
     }))
   );
   return settled
@@ -255,7 +270,6 @@ export async function fetchVariants(mpn: string): Promise<VariantResult[]> {
 }
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
-// FIX: robust JSON extractor that won't match plain-text brackets like [HUMAN APPROVED]
 async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000): Promise<T | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
@@ -278,8 +292,6 @@ async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000
     const d = await res.json();
     const text: string = d?.content?.[0]?.text ?? "";
 
-    // Find JSON array or object — must start with [ or { immediately
-    // Use two separate searches and pick whichever appears first
     const arrMatch = text.match(/\[[\s\S]*\]/);
     const objMatch = text.match(/\{[\s\S]*\}/);
 
@@ -293,16 +305,11 @@ async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000
     }
 
     if (!candidate) throw new Error("No JSON in response");
-
-    // Safety check: must start with [ or { (rejects "[HUMAN APPROVED]" etc.)
     const trimmed = candidate.trim();
     if (trimmed[0] !== '[' && trimmed[0] !== '{') throw new Error("Not valid JSON");
-
-    // For arrays: first char after [ must be { or ] (not a letter)
     if (trimmed[0] === '[' && trimmed[1] !== '{' && trimmed[1] !== ']' && trimmed[1] !== '\n' && trimmed[1] !== ' ') {
       throw new Error("Array does not contain objects");
     }
-
     return JSON.parse(trimmed) as T;
   } catch (err: any) {
     console.error(`[Claude] Error: ${err?.message}`);
@@ -360,7 +367,7 @@ export async function fetchEquivalentICs(mpn: string): Promise<EquivalentIC[]> {
   const suggestions = await suggestEquivalentICs(mpn);
   if (!suggestions.length) return [];
   const settled = await Promise.allSettled(
-    suggestions.map(async s => ({ ...s, suppliers: await fetchOemSecrets(s.mpn) }))
+    suggestions.map(async s => ({ ...s, suppliers: await fetchOemSecrets(s.mpn, "equivalents") }))
   );
   return settled
     .filter((r): r is PromiseFulfilledResult<EquivalentIC> => r.status === "fulfilled")
@@ -406,7 +413,6 @@ export async function draftCounterOffer(
   supplier: string, mpn: string, unitPrice: number,
   currency: string, moq: number, negotiationReason: string
 ): Promise<string> {
-  // Use plain text Claude call — not claudeJson — since this returns prose not JSON
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return `Dear ${supplier},\n\nWe would like to negotiate the price for ${mpn}.\n\nBest regards,\nProcurement Team`;
   try {
@@ -438,8 +444,6 @@ Return ONLY the plain text email body — no subject line, no JSON.`,
   }
 }
 
-// FIX: generatePoText no longer calls Claude — generates PO text directly
-// This prevents "[HUMAN APPROVED]" being parsed as JSON
 export async function generatePoText(params: {
   supplier: string; mpn: string; price: number | null; moq: number;
   leadTime: string; region: string; modNote?: string;
@@ -449,7 +453,6 @@ export async function generatePoText(params: {
     year: "numeric", month: "long", day: "numeric",
   });
   const total = ((params.price ?? 0) * params.moq).toFixed(2);
-
   return `PURCHASE ORDER ${poNumber}
 Date: ${today}
 Supplier: ${params.supplier}
@@ -470,7 +473,6 @@ Payment due within 30 days of invoice receipt.`;
 
 // ── Price / stock monitor ─────────────────────────────────────────────────────
 export async function analyzeMarketData(stockData: SupplierResult[]) {
-  // Group by MPN so Claude can reason per-part
   const byMpn: Record<string, SupplierResult[]> = {};
   for (const s of stockData) {
     if (!s.mpn) continue;
@@ -566,37 +568,23 @@ export async function createHitlRequest(req: Omit<HitlRequest, "createdAt" | "st
   const id = req.id;
   try {
     await supabaseAdmin.from("hitl_queue").insert({
-      id,
-      action: req.action,
-      supplier: req.supplier,
-      mpn: req.mpn,
-      price: req.price,
-      currency: req.currency,
-      stock: req.stock,
-      moq: req.moq,
-      lead_time: req.leadTime,
-      region: req.region,
-      url: req.url,
-      total_value: req.totalValue,
-      reason: req.reason,
+      id, action: req.action, supplier: req.supplier, mpn: req.mpn,
+      price: req.price, currency: req.currency, stock: req.stock, moq: req.moq,
+      lead_time: req.leadTime, region: req.region, url: req.url,
+      total_value: req.totalValue, reason: req.reason,
       ai_recommendation: req.aiRecommendation ?? null,
-      status: "pending",
-      created_at: new Date().toISOString(),
+      status: "pending", created_at: new Date().toISOString(),
     });
   } catch (e: any) { console.error("[HITL] Queue insert failed:", e?.message); }
   return id;
 }
 
 export async function updateHitlStatus(
-  id: string,
-  status: "approved" | "rejected" | "modified",
-  modifiedNote?: string
+  id: string, status: "approved" | "rejected" | "modified", modifiedNote?: string
 ) {
   try {
     await supabaseAdmin.from("hitl_queue").update({
-      status,
-      modified_note: modifiedNote ?? null,
-      decided_at: new Date().toISOString(),
+      status, modified_note: modifiedNote ?? null, decided_at: new Date().toISOString(),
     }).eq("id", id);
   } catch (e: any) { console.error("[HITL] Status update failed:", e?.message); }
 }
@@ -604,9 +592,7 @@ export async function updateHitlStatus(
 export async function getPendingHitlRequests(): Promise<HitlRequest[]> {
   try {
     const { data } = await supabaseAdmin
-      .from("hitl_queue")
-      .select("*")
-      .eq("status", "pending")
+      .from("hitl_queue").select("*").eq("status", "pending")
       .order("created_at", { ascending: false });
     return (data ?? []).map(r => ({
       id: r.id, action: r.action, supplier: r.supplier, mpn: r.mpn,
@@ -622,10 +608,8 @@ export async function getPendingHitlRequests(): Promise<HitlRequest[]> {
 export async function getAllHitlRequests(): Promise<HitlRequest[]> {
   try {
     const { data } = await supabaseAdmin
-      .from("hitl_queue")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .from("hitl_queue").select("*")
+      .order("created_at", { ascending: false }).limit(100);
     return (data ?? []).map(r => ({
       id: r.id, action: r.action, supplier: r.supplier, mpn: r.mpn,
       price: r.price, currency: r.currency, stock: r.stock, moq: r.moq,

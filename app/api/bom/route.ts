@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
         await Promise.allSettled(
           lineItems.map(async (item) => {
-            const suppliers = await fetchOemSecrets(item.mpn).catch(() => []);
+            const suppliers = await fetchOemSecrets(item.mpn, "bom").catch(() => []);
             const inStock = suppliers.filter(s => s.hasPrice && s.stock > 0);
             const best = inStock.sort((a, b) => (a.price ?? 9999) - (b.price ?? 9999))[0];
 
