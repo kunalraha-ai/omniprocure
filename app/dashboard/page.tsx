@@ -137,12 +137,7 @@ export default function DashboardPage() {
           icon={<AlertCircle className="w-5 h-5 text-orange-400" />}
           subtitle="Requires action"
         />
-        <StatsCard
-          label="Pending POs"
-          value={stats.pendingPOs}
-          icon={<ShoppingCart className="w-5 h-5 text-blue-400" />}
-          subtitle="Awaiting approval"
-        />
+       
         <StatsCard
           label="API Calls Today"
           value={stats.apiCalls}
