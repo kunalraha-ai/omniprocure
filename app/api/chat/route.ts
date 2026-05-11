@@ -69,17 +69,6 @@ const TOOLS = [
     },
   },
   {
-    name: "get_email_quotes",
-    description: "Get recent supplier quote emails that were received and parsed.",
-    input_schema: {
-      type: "object",
-      properties: {
-        status: { type: "string", enum: ["pending", "hitl_created", "approved", "rejected", "all"] },
-        limit: { type: "number" },
-      },
-    },
-  },
-  {
     name: "run_monitor_check",
     description:
       "Trigger a live monitoring check for all watched components. Use when user asks to run a check, refresh data, or scan for issues now.",
@@ -105,18 +94,38 @@ const TOOLS = [
       required: ["alert_id"],
     },
   },
-    {
-      name: "parse_bom",
-      description: "Parse a BOM (Bill of Materials) CSV text, source suppliers for each part via OEM API, and save all parts to monitored_parts. Use when the user uploads a BOM file or pastes a list of MPNs to source.",
-      input_schema: {
-        type: "object",
-        properties: {
-          raw: { type: "string", description: "Raw CSV text content of the BOM" },
-          filename: { type: "string", description: "Original filename" },
+  {
+    name: "create_alert",
+    description:
+      "Save a supply chain alert to the database. Use this whenever you identify a real issue: single source risk, out of stock, long lead time (>8 weeks), limited stock (<500 units), price spike, or any procurement risk. ALWAYS call this tool — never just mention the issue conversationally without saving it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        mpn: { type: "string", description: "The part number with the issue" },
+        urgency: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "high = critical/OOS/single source risk. medium = long lead time/limited stock. low = watch only.",
         },
-        required: ["raw"],
+        summary: { type: "string", description: "One sentence describing the issue clearly" },
+        recommendation: { type: "string", description: "buy_now, watch, or hold" },
       },
+      required: ["mpn", "urgency", "summary", "recommendation"],
     },
+  },
+  {
+    name: "parse_bom",
+    description:
+      "Parse a BOM (Bill of Materials) CSV text, source suppliers for each part via OEM API, and save all parts to monitored_parts. Use when the user uploads a BOM file or pastes a list of MPNs to source.",
+    input_schema: {
+      type: "object",
+      properties: {
+        raw: { type: "string", description: "Raw CSV text content of the BOM" },
+        filename: { type: "string", description: "Original filename" },
+      },
+      required: ["raw"],
+    },
+  },
 ];
 
 // ── Tool execution ────────────────────────────────────────────────────────────
@@ -147,34 +156,6 @@ async function executeTool(name: string, input: any): Promise<string> {
         })));
       }
 
-      case "parse_bom": {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://omniprocure.online"}/api/bom`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ raw: input.raw, filename: input.filename ?? "chat-upload.csv" }),
-  });
-  // Consume the SSE stream and return summary
-  const reader = res.body?.getReader();
-  if (!reader) return "BOM API unavailable.";
-  const decoder = new TextDecoder();
-  let summary = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const text = decoder.decode(value);
-    const lines = text.split("\n").filter(l => l.startsWith("data:"));
-    for (const line of lines) {
-      try {
-        const evt = JSON.parse(line.replace("data:", "").trim());
-        if (evt.type === "complete") {
-          summary = `✅ BOM processed: ${evt.totalItems} parts found. ${evt.sourced} sourced, ${evt.partial} partial, ${evt.unfound} unfound. Estimated cost: $${evt.estimatedCost?.toFixed(2)}. All parts added to monitored_parts.`;
-        }
-      } catch {}
-    }
-  }
-  return summary || "BOM processed and parts saved to monitoring.";
-}
-
       case "get_watchlist": {
         const { data } = await supabaseAdmin.from("watchlist").select("*").order("added_at", { ascending: false });
         if (!data?.length) return "Watchlist is empty.";
@@ -182,33 +163,23 @@ async function executeTool(name: string, input: any): Promise<string> {
       }
 
       case "add_to_watchlist": {
-  const mpn = input.mpn.toUpperCase();
-  await supabaseAdmin.from("watchlist").upsert(
-    { mpn, label: input.label ?? mpn, added_at: new Date().toISOString() },
-    { onConflict: "mpn" }
-  );
-  await supabaseAdmin.from("monitored_parts").upsert(
-    { mpn, part_name: input.label ?? mpn, quantity: 1, is_active: true, created_at: new Date().toISOString() },
-    { onConflict: "mpn" }
-  );
-  return `✅ ${mpn} added to watchlist and monitoring. It will appear on your Monitor page.`;
-}
+        const mpn = input.mpn.toUpperCase();
+        await supabaseAdmin.from("watchlist").upsert(
+          { mpn, label: input.label ?? mpn, added_at: new Date().toISOString() },
+          { onConflict: "mpn" }
+        );
+        await supabaseAdmin.from("monitored_parts").upsert(
+          { mpn, part_name: input.label ?? mpn, quantity: 1, is_active: true, created_at: new Date().toISOString() },
+          { onConflict: "mpn" }
+        );
+        return `✅ ${mpn} added to watchlist and monitoring. It will appear on your Monitor page.`;
+      }
 
       case "get_monitored_parts": {
         const { data } = await supabaseAdmin
           .from("monitored_parts").select("*").eq("is_active", true)
           .limit(input.limit ?? 20);
         if (!data?.length) return "No parts being monitored. Upload a BOM first.";
-        return JSON.stringify(data);
-      }
-
-      case "get_email_quotes": {
-        const status = input.status ?? "all";
-        const limit = input.limit ?? 10;
-        let query = supabaseAdmin.from("email_quotes").select("*").order("received_at", { ascending: false }).limit(limit);
-        if (status !== "all") query = query.eq("status", status);
-        const { data } = await query;
-        if (!data?.length) return "No email quotes found.";
         return JSON.stringify(data);
       }
 
@@ -227,6 +198,51 @@ async function executeTool(name: string, input: any): Promise<string> {
         return `✅ Alert ${input.alert_id} marked as read.`;
       }
 
+      case "create_alert": {
+        const { data, error } = await supabaseAdmin
+          .from("alerts")
+          .insert({
+            mpn: input.mpn.toUpperCase(),
+            urgency: input.urgency,
+            summary: input.summary,
+            recommendation: input.recommendation,
+            flagged_by: "chat",
+            is_read: false,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        if (error) return `Failed to save alert: ${error.message}`;
+        return `✅ Alert saved for ${input.mpn.toUpperCase()} (${input.urgency} urgency). It will appear in your Alerts page immediately.`;
+      }
+
+      case "parse_bom": {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://omniprocure.online"}/api/bom`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ raw: input.raw, filename: input.filename ?? "chat-upload.csv" }),
+        });
+        const reader = res.body?.getReader();
+        if (!reader) return "BOM API unavailable.";
+        const decoder = new TextDecoder();
+        let summary = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          const lines = text.split("\n").filter(l => l.startsWith("data:"));
+          for (const line of lines) {
+            try {
+              const evt = JSON.parse(line.replace("data:", "").trim());
+              if (evt.type === "complete") {
+                summary = `✅ BOM processed: ${evt.totalItems} parts found. ${evt.sourced} sourced, ${evt.partial} partial, ${evt.unfound} unfound. Estimated cost: $${evt.estimatedCost?.toFixed(2)}. All parts added to monitored_parts.`;
+              }
+            } catch {}
+          }
+        }
+        return summary || "BOM processed and parts saved to monitoring.";
+      }
+
       default:
         return `Unknown tool: ${name}`;
     }
@@ -243,20 +259,16 @@ export async function POST(req: NextRequest) {
 
     const sid = sessionId ?? `session-${Date.now()}`;
 
-    // Load conversation history from Supabase
     const { data: historyRows } = await supabaseAdmin
       .from("chat_sessions")
       .select("role, content")
       .eq("session_id", sid)
       .order("created_at", { ascending: true })
-      .limit(40); // keep last 40 messages for context
+      .limit(40);
 
     const history = (historyRows ?? []).map(r => ({ role: r.role, content: r.content }));
-
-    // Append new user message
     const messages = [...history, { role: "user", content: message }];
 
-    // Save user message
     await supabaseAdmin.from("chat_sessions").insert({
       session_id: sid,
       role: "user",
@@ -264,7 +276,6 @@ export async function POST(req: NextRequest) {
       created_at: new Date().toISOString(),
     });
 
-    // ── Agentic loop: Claude + tool use ──────────────────────────────────────
     let currentMessages = messages;
     let finalText = "";
     let iterations = 0;
@@ -289,11 +300,21 @@ You help electronics procurement teams by:
 - Checking live stock and pricing for any component MPN via OEM Secrets API
 - Monitoring supply chain alerts and flagging risks
 - Managing watchlists of critical components
-- Reviewing supplier email quotes
 - Triggering monitoring checks on demand
 
-When a user asks about a component (e.g. "what's the stock on ESP32?"), ALWAYS use query_stock to get live data. Don't guess.
+When a user asks about a component, ALWAYS use query_stock to get live data. Don't guess.
 When asked about alerts or issues, use get_alerts.
+
+CRITICAL ALERT RULES — these are non-negotiable:
+- If query_stock returns ANY of these conditions, you MUST call create_alert immediately:
+  1. Only 1 supplier has stock (single source risk)
+  2. Lead time > 8 weeks on any supplier
+  3. Total stock < 500 units across all suppliers
+  4. Zero stock across all suppliers (out of stock)
+  5. No pricing available from any supplier
+- Do NOT just mention the issue in text — always save it with create_alert.
+- After saving the alert, tell the user it's been saved to their Alerts page.
+
 Be concise, direct, and actionable. Format numbers clearly. Use bullet points for multi-item responses.
 Current date: ${new Date().toISOString().split("T")[0]}`,
           messages: currentMessages,
@@ -307,7 +328,6 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
         throw new Error(`Claude API error: ${JSON.stringify(claudeData)}`);
       }
 
-      // Check stop reason
       if (claudeData.stop_reason === "end_turn") {
         finalText = claudeData.content
           .filter((b: any) => b.type === "text")
@@ -316,14 +336,10 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
         break;
       }
 
-      // Handle tool use
       if (claudeData.stop_reason === "tool_use") {
         const toolUseBlocks = claudeData.content.filter((b: any) => b.type === "tool_use");
-
-        // Add assistant message with tool calls
         currentMessages = [...currentMessages, { role: "assistant", content: claudeData.content }];
 
-        // Execute all tools in parallel
         const toolResults = await Promise.all(
           toolUseBlocks.map(async (block: any) => {
             const result = await executeTool(block.name, block.input);
@@ -335,12 +351,10 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
           })
         );
 
-        // Add tool results
         currentMessages = [...currentMessages, { role: "user", content: toolResults }];
         continue;
       }
 
-      // Fallback: extract any text
       finalText = claudeData.content
         ?.filter((b: any) => b.type === "text")
         .map((b: any) => b.text)
@@ -348,7 +362,6 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
       break;
     }
 
-    // Save assistant response
     await supabaseAdmin.from("chat_sessions").insert({
       session_id: sid,
       role: "assistant",
@@ -373,7 +386,6 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
 export async function GET(req: NextRequest) {
   const sessionId = req.nextUrl.searchParams.get("sessionId");
   if (!sessionId) {
-    // Return list of sessions
     const { data } = await supabaseAdmin
       .from("chat_sessions")
       .select("session_id, content, created_at")
