@@ -176,7 +176,7 @@ export default function DashboardSettingsPage() {
 
   async function clearMonitoredParts() {
     setClearingParts(true)
-    const { error } = await supabase.from('monitored_parts').delete().neq('id', '')
+    const { error } = await supabase.from('monitored_parts').delete().gte('created_at', '2000-01-01')
     setClearingParts(false)
     setToast(error
       ? { type: 'error', text: `Failed: ${error.message}` }
@@ -186,7 +186,7 @@ export default function DashboardSettingsPage() {
 
   async function clearAlerts() {
     setClearingAlerts(true)
-    const { error } = await supabase.from('alerts').delete().neq('id', '')
+    const { error } = await supabase.from('alerts').delete().gte('created_at', '2000-01-01')
     setClearingAlerts(false)
     setToast(error
       ? { type: 'error', text: `Failed: ${error.message}` }
