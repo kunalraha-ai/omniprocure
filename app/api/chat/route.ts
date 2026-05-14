@@ -1,18 +1,35 @@
 /**
  * POST /api/chat
+ * GET  /api/chat
  * ─────────────────────────────────────────────────────────────────────────────
  * OmniProcure AI Command Center
- * Claude with tool use — can query OEM API, Supabase tables, manage watchlist
- * Persists conversation history to Supabase chat_sessions table
+ * Claude with tool use — scoped per authenticated Supabase user
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { fetchOemSecrets, logAuditEvent, supabaseAdmin } from "@/lib/procurement";
 
 export const maxDuration = 60;
 
-// ── Tool definitions for Claude ───────────────────────────────────────────────
+// ── Get authenticated user from request cookies ───────────────────────────────
+async function getAuthUser(req: NextRequest) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => req.cookies.getAll().map(c => ({ name: c.name, value: c.value })),
+        setAll: () => {},
+      },
+    }
+  );
+  const { data } = await supabase.auth.getUser();
+  return data.user;
+}
+
+// ── Tool definitions ──────────────────────────────────────────────────────────
 const TOOLS = [
   {
     name: "query_stock",
@@ -199,7 +216,7 @@ async function executeTool(name: string, input: any): Promise<string> {
       }
 
       case "create_alert": {
-        const { data, error } = await supabaseAdmin
+        const { error } = await supabaseAdmin
           .from("alerts")
           .insert({
             mpn: input.mpn.toUpperCase(),
@@ -209,9 +226,7 @@ async function executeTool(name: string, input: any): Promise<string> {
             flagged_by: "chat",
             is_read: false,
             created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+          });
         if (error) return `Failed to save alert: ${error.message}`;
         return `✅ Alert saved for ${input.mpn.toUpperCase()} (${input.urgency} urgency). It will appear in your Alerts page immediately.`;
       }
@@ -251,31 +266,40 @@ async function executeTool(name: string, input: any): Promise<string> {
   }
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// ── POST: send message ────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const user = await getAuthUser(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { message, sessionId } = await req.json();
     if (!message) return NextResponse.json({ error: "message required" }, { status: 400 });
 
     const sid = sessionId ?? `session-${Date.now()}`;
+    const userId = user.id;
 
+    // Load history scoped to this user + session
     const { data: historyRows } = await supabaseAdmin
       .from("chat_sessions")
       .select("role, content")
       .eq("session_id", sid)
+      .eq("user_id", userId)
       .order("created_at", { ascending: true })
       .limit(40);
 
     const history = (historyRows ?? []).map(r => ({ role: r.role, content: r.content }));
     const messages = [...history, { role: "user", content: message }];
 
+    // Save user message with user_id
     await supabaseAdmin.from("chat_sessions").insert({
       session_id: sid,
+      user_id: userId,
       role: "user",
       content: message,
       created_at: new Date().toISOString(),
     });
 
+    // ── Agentic loop ──────────────────────────────────────────────────────────
     let currentMessages = messages;
     let finalText = "";
     let iterations = 0;
@@ -341,14 +365,11 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
         currentMessages = [...currentMessages, { role: "assistant", content: claudeData.content }];
 
         const toolResults = await Promise.all(
-          toolUseBlocks.map(async (block: any) => {
-            const result = await executeTool(block.name, block.input);
-            return {
-              type: "tool_result",
-              tool_use_id: block.id,
-              content: result,
-            };
-          })
+          toolUseBlocks.map(async (block: any) => ({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: await executeTool(block.name, block.input),
+          }))
         );
 
         currentMessages = [...currentMessages, { role: "user", content: toolResults }];
@@ -362,8 +383,10 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
       break;
     }
 
+    // Save assistant response with user_id
     await supabaseAdmin.from("chat_sessions").insert({
       session_id: sid,
+      user_id: userId,
       role: "assistant",
       content: finalText,
       created_at: new Date().toISOString(),
@@ -371,7 +394,7 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
 
     await logAuditEvent({
       action: "chat_message",
-      details: { sessionId: sid, userMessage: message.slice(0, 100), iterations },
+      details: { sessionId: sid, userId, userMessage: message.slice(0, 100), iterations },
     });
 
     return NextResponse.json({ success: true, sessionId: sid, reply: finalText });
@@ -382,13 +405,19 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
   }
 }
 
-// ── GET: load session history ─────────────────────────────────────────────────
+// ── GET: load sessions scoped to user ────────────────────────────────────────
 export async function GET(req: NextRequest) {
+  const user = await getAuthUser(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const sessionId = req.nextUrl.searchParams.get("sessionId");
+
   if (!sessionId) {
+    // List this user's sessions only
     const { data } = await supabaseAdmin
       .from("chat_sessions")
       .select("session_id, content, created_at")
+      .eq("user_id", user.id)
       .eq("role", "user")
       .order("created_at", { ascending: false })
       .limit(20);
@@ -396,10 +425,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ sessions });
   }
 
+  // Load specific session — scoped to this user
   const { data } = await supabaseAdmin
     .from("chat_sessions")
     .select("role, content, created_at")
     .eq("session_id", sessionId)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
   return NextResponse.json({ messages: data ?? [] });
