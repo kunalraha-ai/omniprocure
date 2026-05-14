@@ -3,6 +3,7 @@
  */
 
 import { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import {
   parseBomWithClaude,
   fetchOemSecrets,
@@ -23,6 +24,25 @@ export interface BomLineResult extends BomLineItem {
   status: "sourced" | "partial" | "unfound";
 }
 
+async function getUserId(req: NextRequest): Promise<string | null> {
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => req.cookies.getAll().map(c => ({ name: c.name, value: c.value })),
+          setAll: () => {},
+        },
+      }
+    );
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const raw: string = body?.raw ?? "";
@@ -31,6 +51,9 @@ export async function POST(req: NextRequest) {
   if (!raw.trim()) {
     return new Response("raw BOM data required", { status: 400 });
   }
+
+  // Get user early before stream starts
+  const userId = await getUserId(req);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -77,7 +100,6 @@ export async function POST(req: NextRequest) {
             };
             results.push(result);
 
-            // ✅ Map to the field names BomResultRow expects on the frontend
             send("line_item_result", {
               item: {
                 mpn: result.mpn,
@@ -95,13 +117,14 @@ export async function POST(req: NextRequest) {
           })
         );
 
-        // Save to Supabase
+        // Save to Supabase — stamp user_id on every row
         try {
           await supabaseAdmin.from("bom_uploads").insert({
             filename,
             line_items: results,
             item_count: results.length,
             uploaded_at: new Date().toISOString(),
+            ...(userId ? { user_id: userId } : {}),
           });
 
           const monitoredPayload = results
@@ -111,15 +134,17 @@ export async function POST(req: NextRequest) {
               part_name: r.description,
               quantity: r.qty,
               is_active: true,
+              ...(userId ? { user_id: userId } : {}),
             }));
 
           if (monitoredPayload.length > 0) {
             const { error: upsertError } = await supabaseAdmin
               .from('monitored_parts')
-              .upsert(monitoredPayload, { onConflict: 'mpn' });
+              .upsert(monitoredPayload, {
+                onConflict: userId ? 'mpn,user_id' : 'mpn',
+              });
             if (upsertError) console.error('[BOM] monitored_parts upsert failed:', upsertError);
             else console.log('[BOM] monitored_parts saved:', monitoredPayload.length);
-            console.log('[BOM] Full error object from monitored_parts upsert:', upsertError);
           }
         } catch (e: any) {
           console.error('[BOM] Supabase save failed:', e?.message);
@@ -131,6 +156,7 @@ export async function POST(req: NextRequest) {
             filename,
             itemCount: results.length,
             sourcedCount: results.filter(r => r.status === "sourced").length,
+            userId,
           },
         });
 

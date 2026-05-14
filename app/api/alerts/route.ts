@@ -1,17 +1,31 @@
 /**
  * /api/alerts/route.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * GET    → list all alerts (newest first)
- * POST   → create a new alert
- * PATCH  → mark alert(s) as read  { id: string } or { markAllRead: true }
- * DELETE → delete an alert        { id: string }
- * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin, logAuditEvent } from "@/lib/procurement";
 
 export const maxDuration = 15;
+
+async function getUserId(req: NextRequest): Promise<string | null> {
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => req.cookies.getAll().map(c => ({ name: c.name, value: c.value })),
+          setAll: () => {},
+        },
+      }
+    );
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ── GET: list alerts ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -45,19 +59,15 @@ export async function POST(req: NextRequest) {
   const { mpn, urgency, summary, recommendation, flaggedBy = "monitor" } = body;
 
   if (!mpn || !urgency || !summary) {
-    return NextResponse.json(
-      { error: "mpn, urgency, and summary are required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "mpn, urgency, and summary are required" }, { status: 400 });
   }
 
   const validUrgencies = ["low", "medium", "high"];
   if (!validUrgencies.includes(urgency)) {
-    return NextResponse.json(
-      { error: `urgency must be one of: ${validUrgencies.join(", ")}` },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: `urgency must be one of: ${validUrgencies.join(", ")}` }, { status: 400 });
   }
+
+  const userId = await getUserId(req);
 
   try {
     const { data, error } = await supabaseAdmin
@@ -70,6 +80,7 @@ export async function POST(req: NextRequest) {
         flagged_by: flaggedBy,
         is_read: false,
         created_at: new Date().toISOString(),
+        ...(userId ? { user_id: userId } : {}),
       })
       .select()
       .single();
@@ -79,7 +90,7 @@ export async function POST(req: NextRequest) {
     await logAuditEvent({
       action: "alert_created",
       mpn: mpn.toUpperCase(),
-      details: { urgency, summary, flaggedBy },
+      details: { urgency, summary, flaggedBy, userId },
     });
 
     return NextResponse.json({ success: true, alert: data });
@@ -103,14 +114,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, message: "All alerts marked as read" });
     }
 
-    if (!id) {
-      return NextResponse.json({ error: "id or markAllRead required" }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: "id or markAllRead required" }, { status: 400 });
 
-    const { error } = await supabaseAdmin
-      .from("alerts")
-      .update({ is_read: true })
-      .eq("id", id);
+    const { error } = await supabaseAdmin.from("alerts").update({ is_read: true }).eq("id", id);
     if (error) throw error;
 
     return NextResponse.json({ success: true, message: `Alert ${id} marked as read` });
@@ -124,17 +130,11 @@ export async function DELETE(req: NextRequest) {
   const body = await req.json();
   const { id } = body;
 
-  if (!id) {
-    return NextResponse.json({ error: "id required" }, { status: 400 });
-  }
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   try {
-    const { error } = await supabaseAdmin
-      .from("alerts")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabaseAdmin.from("alerts").delete().eq("id", id);
     if (error) throw error;
-
     return NextResponse.json({ success: true, message: `Alert ${id} deleted` });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });

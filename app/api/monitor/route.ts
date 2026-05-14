@@ -1,8 +1,10 @@
 /**
  * POST /api/monitor
+ * Monitor route — stamps user_id on all inserts
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import {
   fetchOemSecrets,
   analyzeMarketData,
@@ -14,7 +16,26 @@ import { notifyAlert } from "@/lib/notify";
 
 export const maxDuration = 60;
 
-// ── GET: watchlist ─────────────────────────────────────────────────────────────
+async function getUserId(req: NextRequest): Promise<string | null> {
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => req.cookies.getAll().map(c => ({ name: c.name, value: c.value })),
+          setAll: () => {},
+        },
+      }
+    );
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ── GET: watchlist ────────────────────────────────────────────────────────────
 export async function GET() {
   try {
     const { data } = await supabaseAdmin
@@ -31,10 +52,18 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const { mpn, label } = await req.json();
   if (!mpn) return NextResponse.json({ error: "mpn required" }, { status: 400 });
+
+  const userId = await getUserId(req);
+
   try {
     await supabaseAdmin.from("watchlist").upsert(
-      { mpn: mpn.toUpperCase(), label: label ?? mpn, added_at: new Date().toISOString() },
-      { onConflict: "mpn" }
+      {
+        mpn: mpn.toUpperCase(),
+        label: label ?? mpn,
+        added_at: new Date().toISOString(),
+        ...(userId ? { user_id: userId } : {}),
+      },
+      { onConflict: userId ? "mpn,user_id" : "mpn" }
     );
     return NextResponse.json({ success: true, message: `${mpn} added to watchlist` });
   } catch (e: any) {
@@ -58,6 +87,9 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   let mpns: string[] = body?.mpns ?? [];
+
+  // userId — null for cron calls (no session), set for user-triggered checks
+  const userId = await getUserId(req);
 
   if (!mpns.length) {
     const { data } = await supabaseAdmin.from("watchlist").select("mpn");
@@ -84,7 +116,7 @@ export async function POST(req: NextRequest) {
     const fetchResults = await Promise.allSettled(
       mpns.map(async (mpn) => ({
         mpn,
-        suppliers: await fetchOemSecrets(mpn, "cron"),
+        suppliers: await fetchOemSecrets(mpn),
       }))
     );
 
@@ -107,10 +139,8 @@ export async function POST(req: NextRequest) {
           supplierCount: inStock.length,
           bestPrice: best?.price ?? null,
           bestLeadTime: best?.leadTime ?? null,
-          status: inStock.length === 0
-            ? "out_of_stock"
-            : inStock.length === 1
-            ? "single_source"
+          status: inStock.length === 0 ? "out_of_stock"
+            : inStock.length === 1 ? "single_source"
             : "healthy",
         };
       });
@@ -131,13 +161,13 @@ export async function POST(req: NextRequest) {
               flagged_by: "monitor",
               is_read: false,
               created_at: new Date().toISOString(),
+              ...(userId ? { user_id: userId } : {}),
             })
             .select()
             .single();
 
           if (alertData) {
             savedAlerts.push(alertData);
-            // ✅ Notify after saving alert
             await notifyAlert({
               mpn: flaggedMpn,
               urgency: analysis.urgency,
@@ -169,8 +199,8 @@ export async function POST(req: NextRequest) {
             flagged_by: "monitor",
             is_read: false,
             created_at: new Date().toISOString(),
+            ...(userId ? { user_id: userId } : {}),
           });
-          // ✅ Notify for out of stock
           await notifyAlert({
             mpn: part.mpn,
             urgency: 'high',
@@ -198,6 +228,7 @@ export async function POST(req: NextRequest) {
         urgency: analysis?.urgency,
         recommendation: analysis?.recommendation,
         alertsSaved: savedAlerts.length,
+        userId,
       },
     });
 
