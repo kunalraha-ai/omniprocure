@@ -1,28 +1,60 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { AlertTriangle, AlertCircle, Zap, Plus, Trash2, Loader2, Eye } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
-function StatsCard({ label, value, icon, subtitle }: {
-  label: string; value: string | number; icon: React.ReactNode; subtitle?: string
+// ── Design tokens matching landing page ───────────────────────────────────────
+const C = {
+  green:      '#1b7a52',
+  greenSoft:  'rgba(27,122,82,0.15)',
+  greenBorder:'rgba(27,122,82,0.25)',
+  text:       '#dff0e8',
+  muted:      '#7aaa8e',
+  mutedDim:   '#3e6b52',
+  surface:    'rgba(7,26,16,0.55)',
+  border:     'rgba(27,122,82,0.18)',
+  warn:       '#d97706',
+  warnSoft:   'rgba(120,80,10,0.2)',
+  danger:     '#f87171',
+  dangerSoft: 'rgba(100,20,20,0.2)',
+}
+
+function StatsCard({ label, value, icon, subtitle, accent }: {
+  label: string
+  value: string | number
+  icon: React.ReactNode
+  subtitle?: string
+  accent?: string
 }) {
   return (
-    <div className="glass-panel rounded-3xl p-6 hover:border-slate-600/60 transition-colors">
-      <div className="flex items-start justify-between mb-4"><div>{icon}</div></div>
-      <p className="text-xs uppercase tracking-[0.24em] text-on-surface-variant mb-2">{label}</p>
-      <p className="text-3xl font-semibold text-on-surface mb-1">{value}</p>
-      {subtitle && <p className="text-xs text-on-surface-variant">{subtitle}</p>}
+    <div
+      className="rounded-2xl p-5 flex flex-col gap-3"
+      style={{ background: C.surface, border: `1px solid ${C.border}`, backdropFilter: 'blur(16px)' }}
+    >
+      <div className="flex items-start justify-between">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}` }}
+        >
+          {icon}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: C.mutedDim, letterSpacing: '0.14em' }}>{label}</p>
+        <p className="text-3xl font-bold" style={{ color: accent ?? C.text, fontFamily: "'Syne', sans-serif" }}>{value}</p>
+        {subtitle && <p className="text-xs mt-1" style={{ color: C.muted }}>{subtitle}</p>}
+      </div>
     </div>
   )
 }
 
-// ── Watchlist Card ─────────────────────────────────────────────────────────────
+// ── Watchlist Card ────────────────────────────────────────────────────────────
 function WatchlistCard() {
-  const [items, setItems]       = useState<any[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [input, setInput]       = useState('')
-  const [adding, setAdding]     = useState(false)
+  const [items, setItems]           = useState<any[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [input, setInput]           = useState('')
+  const [adding, setAdding]         = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
 
   useEffect(() => { fetchWatchlist() }, [])
@@ -45,10 +77,7 @@ function WatchlistCard() {
       { mpn, label: mpn, added_at: new Date().toISOString() },
       { onConflict: 'mpn' }
     )
-    if (!error) {
-      setInput('')
-      await fetchWatchlist()
-    }
+    if (!error) { setInput(''); await fetchWatchlist() }
     setAdding(false)
   }
 
@@ -60,24 +89,32 @@ function WatchlistCard() {
   }
 
   return (
-    <div className="glass-panel rounded-3xl border-slate-700/60 overflow-hidden">
+    <div
+      className="rounded-2xl overflow-hidden flex flex-col"
+      style={{ background: C.surface, border: `1px solid ${C.border}`, backdropFilter: 'blur(16px)' }}
+    >
       {/* Header */}
-      <div className="p-6 border-b border-slate-700/70 flex items-center justify-between">
+      <div
+        className="px-5 py-4 flex items-center justify-between"
+        style={{ borderBottom: `1px solid ${C.border}` }}
+      >
         <div className="flex items-center gap-2">
-          <Eye className="w-4 h-4" style={{ color: '#7dd3fc' }} />
-          <h2 className="text-base font-semibold text-on-surface">Watchlist</h2>
+          <Eye className="w-4 h-4" style={{ color: C.green }} />
+          <h2 className="text-sm font-semibold" style={{ color: C.text }}>Watchlist</h2>
           {!loading && (
-            <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-              style={{ background: 'rgba(125,211,252,0.1)', color: '#7dd3fc', border: '1px solid rgba(125,211,252,0.2)' }}>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{ background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}` }}
+            >
               {items.length}
             </span>
           )}
         </div>
-        <span className="text-xs text-on-surface-variant">Manually tracked MPNs</span>
+        <span className="text-xs" style={{ color: C.mutedDim }}>Tracked MPNs</span>
       </div>
 
       {/* Add input */}
-      <div className="px-6 py-4 border-b border-slate-700/40">
+      <div className="px-5 py-3.5" style={{ borderBottom: `1px solid rgba(27,122,82,0.1)` }}>
         <div className="flex items-center gap-2">
           <input
             value={input}
@@ -86,9 +123,9 @@ function WatchlistCard() {
             placeholder="Add MPN e.g. ESP32-WROOM-32"
             className="flex-1 bg-transparent text-sm outline-none px-3 py-2 rounded-xl"
             style={{
-              background: 'rgba(15,21,36,0.6)',
-              border: '1px solid rgba(125,211,252,0.15)',
-              color: '#e0e8f0',
+              background: 'rgba(7,26,16,0.5)',
+              border: `1px solid ${C.border}`,
+              color: C.text,
             }}
           />
           <button
@@ -96,9 +133,9 @@ function WatchlistCard() {
             disabled={!input.trim() || adding}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all"
             style={{
-              background: input.trim() ? 'rgba(125,211,252,0.15)' : 'rgba(125,211,252,0.05)',
-              border: '1px solid rgba(125,211,252,0.2)',
-              color: input.trim() ? '#7dd3fc' : '#4a6070',
+              background: input.trim() ? C.greenSoft : 'rgba(27,122,82,0.05)',
+              border: `1px solid ${input.trim() ? C.greenBorder : 'transparent'}`,
+              color: input.trim() ? C.green : C.mutedDim,
               cursor: input.trim() && !adding ? 'pointer' : 'not-allowed',
             }}
           >
@@ -110,45 +147,52 @@ function WatchlistCard() {
 
       {/* List */}
       {loading ? (
-        <div className="flex items-center justify-center gap-2 py-10 text-on-surface-variant">
+        <div className="flex items-center justify-center gap-2 py-10" style={{ color: C.muted }}>
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm">Loading watchlist…</span>
+          <span className="text-sm">Loading…</span>
         </div>
       ) : items.length === 0 ? (
-        <div className="py-10 text-center text-sm text-on-surface-variant">
-          No items yet — add an MPN above to start watching it.
+        <div className="py-10 text-center text-sm" style={{ color: C.mutedDim }}>
+          No items yet — add an MPN above.
         </div>
       ) : (
-        <div className="divide-y divide-slate-700/40">
+        <div style={{ divide: 'rgba(27,122,82,0.08)' }}>
           {items.map(item => (
-            <div key={item.id}
-              className="flex items-center justify-between px-6 py-3 hover:bg-slate-800/20 transition-colors">
+            <div
+              key={item.id}
+              className="flex items-center justify-between px-5 py-3 transition-colors"
+              style={{ borderBottom: `1px solid rgba(27,122,82,0.07)` }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(27,122,82,0.05)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+            >
               <div className="flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full animate-pulse"
-                  style={{ background: '#7dd3fc' }} />
-                <span className="text-sm font-mono font-medium text-on-surface">{item.mpn}</span>
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: C.green, boxShadow: `0 0 6px ${C.green}`, animation: 'pulse 2s infinite' }}
+                />
+                <span className="text-sm font-mono font-medium" style={{ color: C.text }}>{item.mpn}</span>
                 {item.label && item.label !== item.mpn && (
-                  <span className="text-xs text-on-surface-variant">{item.label}</span>
+                  <span className="text-xs" style={{ color: C.muted }}>{item.label}</span>
                 )}
               </div>
               <div className="flex items-center gap-3">
                 {item.last_checked_at && (
-                  <span className="text-xs text-on-surface-variant hidden sm:block">
-                    Checked {new Date(item.last_checked_at).toLocaleDateString()}
+                  <span className="text-xs hidden sm:block" style={{ color: C.mutedDim }}>
+                    {new Date(item.last_checked_at).toLocaleDateString()}
                   </span>
                 )}
                 <button
                   onClick={() => removeItem(item.mpn, item.id)}
                   disabled={removingId === item.id}
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                  style={{ color: '#4a6070' }}
+                  style={{ color: C.mutedDim }}
                   onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.color = '#ff6b6b'
-                    ;(e.currentTarget as HTMLElement).style.background = 'rgba(255,107,107,0.08)'
+                    (e.currentTarget as HTMLElement).style.color = '#f87171';
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(248,113,113,0.08)';
                   }}
                   onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.color = '#4a6070'
-                    ;(e.currentTarget as HTMLElement).style.background = 'transparent'
+                    (e.currentTarget as HTMLElement).style.color = C.mutedDim;
+                    (e.currentTarget as HTMLElement).style.background = 'transparent';
                   }}
                 >
                   {removingId === item.id
@@ -165,44 +209,28 @@ function WatchlistCard() {
   )
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const [alerts, setAlerts]     = useState<any[]>([])
+  const [alerts, setAlerts]       = useState<any[]>([])
   const [monitored, setMonitored] = useState<any[]>([])
-  const [stats, setStats]       = useState({ monitored: 0, activeAlerts: 0, apiCalls: 0 })
+  const [stats, setStats]         = useState({ monitored: 0, activeAlerts: 0, apiCalls: 0 })
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError]       = useState<string | null>(null)
+  const [error, setError]         = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true)
-
-        const { data: alertsData } = await supabase
-          .from('alerts').select('*')
-          .order('created_at', { ascending: false }).limit(5)
-
-        const { data: monitoredData } = await supabase
-          .from('monitored_parts').select('*')
-          .order('created_at', { ascending: false }).limit(5)
-
-        const { count: partsCount } = await supabase
-          .from('monitored_parts').select('*', { count: 'exact', head: true })
-
-        const { count: alertCount } = await supabase
-          .from('alerts').select('*', { count: 'exact', head: true }).eq('is_read', false)
-
+        const { data: alertsData }   = await supabase.from('alerts').select('*').order('created_at', { ascending: false }).limit(5)
+        const { data: monitoredData } = await supabase.from('monitored_parts').select('*').order('created_at', { ascending: false }).limit(5)
+        const { count: partsCount }  = await supabase.from('monitored_parts').select('*', { count: 'exact', head: true })
+        const { count: alertCount }  = await supabase.from('alerts').select('*', { count: 'exact', head: true }).eq('is_read', false)
         const today = new Date().toISOString().split('T')[0]
-        const { count: apiCallCount } = await supabase
-          .from('api_call_log').select('*', { count: 'exact', head: true }).gte('called_at', today)
+        const { count: apiCallCount } = await supabase.from('api_call_log').select('*', { count: 'exact', head: true }).gte('called_at', today)
 
         setAlerts(alertsData || [])
         setMonitored(monitoredData || [])
-        setStats({
-          monitored: partsCount || 0,
-          activeAlerts: alertCount || 0,
-          apiCalls: apiCallCount || 0,
-        })
+        setStats({ monitored: partsCount || 0, activeAlerts: alertCount || 0, apiCalls: apiCallCount || 0 })
       } catch {
         setError('Failed to load dashboard data')
       } finally {
@@ -214,87 +242,116 @@ export default function DashboardPage() {
 
   if (isLoading) return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold text-on-surface mb-2">Dashboard</h1>
-      <p className="text-on-surface-variant">Loading procurement overview...</p>
+      <h1 className="text-3xl font-bold mb-2" style={{ color: C.text, fontFamily: "'Syne', sans-serif" }}>Dashboard</h1>
+      <p style={{ color: C.muted }}>Loading procurement overview…</p>
     </div>
   )
 
   if (error) return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold text-on-surface mb-4">Dashboard</h1>
-      <div className="glass-panel rounded-3xl border-red-500/20 bg-red-500/10 p-4">
-        <p className="text-red-300">{error}</p>
+      <h1 className="text-3xl font-bold mb-4" style={{ color: C.text, fontFamily: "'Syne', sans-serif" }}>Dashboard</h1>
+      <div className="rounded-2xl p-4" style={{ background: C.dangerSoft, border: '1px solid rgba(248,113,113,0.25)' }}>
+        <p style={{ color: '#f87171' }}>{error}</p>
       </div>
     </div>
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
-      {/* Header */}
-      <div className="glass-panel-elevated rounded-[2rem] border-slate-700/70 p-8">
-        <h1 className="text-3xl font-bold text-on-surface mb-1">Dashboard</h1>
-        <p className="text-on-surface-variant">Welcome back! Here's your procurement overview.</p>
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div
+        className="rounded-2xl p-7"
+        style={{ background: 'rgba(7,26,16,0.65)', border: `1px solid ${C.greenBorder}`, backdropFilter: 'blur(20px)' }}
+      >
+        <div className="flex items-center gap-3 mb-1">
+          <div
+            className="text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded-full"
+            style={{ background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}`, letterSpacing: '0.12em' }}
+          >
+            Procurement Overview
+          </div>
+        </div>
+        <h1 className="text-3xl font-bold mt-3" style={{ color: C.text, fontFamily: "'Syne', sans-serif" }}>
+          Dashboard
+        </h1>
+        <p className="mt-1" style={{ color: C.muted, fontSize: 14 }}>
+          Welcome back. Here's your live procurement snapshot.
+        </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* ── Stats ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <StatsCard
           label="Monitored Components"
           value={stats.monitored}
-          icon={<Zap className="w-5 h-5 text-indigo-400" />}
+          icon={<Zap className="w-4 h-4" style={{ color: C.green }} />}
           subtitle="Across all BOMs"
         />
         <StatsCard
           label="Active Alerts"
           value={stats.activeAlerts}
-          icon={<AlertCircle className="w-5 h-5 text-orange-400" />}
+          icon={<AlertCircle className="w-4 h-4" style={{ color: C.warn }} />}
           subtitle="Requires action"
+          accent={stats.activeAlerts > 0 ? C.warn : undefined}
         />
         <StatsCard
           label="API Calls Today"
           value={stats.apiCalls}
-          icon={<Zap className="w-5 h-5 text-purple-400" />}
-          subtitle="Calls this session"
+          icon={<Zap className="w-4 h-4" style={{ color: C.muted }} />}
+          subtitle="Distributor queries"
         />
       </div>
 
-      {/* Watchlist + Recent Alerts side by side on large screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* ── Watchlist + Recent Alerts ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        {/* Watchlist */}
         <WatchlistCard />
 
         {/* Recent Alerts */}
-        <div className="glass-panel rounded-3xl border-slate-700/60 overflow-hidden">
-          <div className="p-6 border-b border-slate-700/70 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-orange-400" />
-            <h2 className="text-base font-semibold text-on-surface">Recent Alerts</h2>
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{ background: C.surface, border: `1px solid ${C.border}`, backdropFilter: 'blur(16px)' }}
+        >
+          <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: `1px solid ${C.border}` }}>
+            <AlertCircle className="w-4 h-4" style={{ color: C.warn }} />
+            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Recent Alerts</h2>
           </div>
           {alerts.length === 0 ? (
-            <div className="p-8 text-center text-on-surface-variant text-sm">
+            <div className="p-8 text-center text-sm" style={{ color: C.mutedDim }}>
               No alerts yet — OmniProcure will notify you when stock or price issues are detected.
             </div>
           ) : (
-            <div className="divide-y divide-slate-700/50">
+            <div>
               {alerts.map((alert) => (
-                <div key={alert.id} className="px-6 py-4 hover:bg-slate-800/30 transition-colors">
+                <div
+                  key={alert.id}
+                  className="px-5 py-4 transition-colors"
+                  style={{ borderBottom: `1px solid rgba(27,122,82,0.07)` }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(27,122,82,0.04)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-mono font-medium text-on-surface">{alert.mpn}</span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          alert.urgency === 'high' ? 'bg-red-500/15 text-red-300'
-                          : alert.urgency === 'medium' ? 'bg-orange-500/15 text-orange-300'
-                          : 'bg-yellow-500/15 text-yellow-300'
-                        }`}>
-                          {alert.urgency === 'high' && <AlertTriangle size={10} />}
+                        <span className="text-sm font-mono font-medium" style={{ color: C.text }}>{alert.mpn}</span>
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={
+                            alert.urgency === 'high'
+                              ? { background: C.dangerSoft, color: C.danger, border: '1px solid rgba(248,113,113,0.25)' }
+                              : alert.urgency === 'medium'
+                              ? { background: C.warnSoft, color: C.warn, border: '1px solid rgba(217,119,6,0.25)' }
+                              : { background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}` }
+                          }
+                        >
+                          {alert.urgency === 'high' && <AlertTriangle size={9} />}
                           {alert.urgency}
                         </span>
                       </div>
-                      <p className="text-xs text-on-surface-variant truncate">{alert.summary}</p>
+                      <p className="text-xs truncate" style={{ color: C.muted }}>{alert.summary}</p>
                     </div>
-                    <span className="text-xs text-on-surface-variant whitespace-nowrap flex-shrink-0">
+                    <span className="text-xs whitespace-nowrap flex-shrink-0" style={{ color: C.mutedDim }}>
                       {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -305,36 +362,58 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Monitored Components */}
-      <div className="glass-panel rounded-3xl border-slate-700/60 overflow-hidden">
-        <div className="p-6 border-b border-slate-700/70">
-          <h2 className="text-base font-semibold text-on-surface">Monitored Components</h2>
+      {/* ── Monitored Components ─────────────────────────────────────────── */}
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{ background: C.surface, border: `1px solid ${C.border}`, backdropFilter: 'blur(16px)' }}
+      >
+        <div className="px-5 py-4" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <h2 className="text-sm font-semibold" style={{ color: C.text }}>Monitored Components</h2>
         </div>
         {monitored.length === 0 ? (
-          <div className="p-8 text-center text-on-surface-variant text-sm">
+          <div className="p-8 text-center text-sm" style={{ color: C.mutedDim }}>
             No components monitored yet —{' '}
-            <a href="/dashboard/bom" className="text-primary hover:underline">upload a BOM to get started</a>
+            <a href="/dashboard/bom" style={{ color: C.green, textDecoration: 'underline' }}>upload a BOM to get started</a>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-950/80">
-                <tr>
+            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'rgba(7,26,16,0.6)' }}>
                   {['MPN', 'Part Name', 'Quantity', 'Status'].map(h => (
-                    <th key={h} className="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase tracking-[0.16em]">{h}</th>
+                    <th
+                      key={h}
+                      className="px-5 py-3 text-left"
+                      style={{ fontSize: 10.5, fontWeight: 700, color: C.mutedDim, letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: `1px solid ${C.border}` }}
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700/50">
+              <tbody>
                 {monitored.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono font-medium text-on-surface">{item.mpn}</td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">{item.part_name}</td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant">{item.quantity}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                        item.is_active ? 'bg-green-500/15 text-green-300' : 'bg-slate-700/50 text-on-surface-variant'
-                      }`}>
+                  <tr
+                    key={item.id}
+                    style={{ borderBottom: `1px solid rgba(27,122,82,0.07)` }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(27,122,82,0.04)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                  >
+                    <td className="px-5 py-3.5 text-sm font-mono font-medium" style={{ color: C.text }}>{item.mpn}</td>
+                    <td className="px-5 py-3.5 text-sm" style={{ color: C.muted }}>{item.part_name}</td>
+                    <td className="px-5 py-3.5 text-sm" style={{ color: C.muted }}>{item.quantity}</td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={
+                          item.is_active
+                            ? { background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}` }
+                            : { background: 'rgba(7,26,16,0.5)', color: C.mutedDim, border: `1px solid ${C.border}` }
+                        }
+                      >
+                        {item.is_active && (
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.green, animation: 'pulse 2s infinite' }} />
+                        )}
                         {item.is_active ? 'Monitoring' : 'Inactive'}
                       </span>
                     </td>

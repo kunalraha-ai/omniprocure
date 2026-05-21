@@ -1,93 +1,136 @@
 /**
  * app/dashboard/glacier.css
- * Shared Glacier glassmorphism design tokens for all dashboard pages
+ * OmniProcure — Unified design tokens matching the landing page palette.
+ * Green-on-dark: #071a10 dark base, #1b7a52 primary green, #dff0e8 surface.
  */
 
+/* ── Core surface panels ────────────────────────────────────────────────────── */
 .glass-panel {
-  background: rgba(15, 21, 36, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(125, 211, 252, 0.1);
+  background: rgba(7, 26, 16, 0.55);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(27, 122, 82, 0.18);
 }
-.glass-elevated {
-  background: rgba(15, 21, 36, 0.75);
+
+.glass-elevated,
+.glass-panel-elevated {
+  background: rgba(7, 26, 16, 0.72);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(125, 211, 252, 0.15);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(27, 122, 82, 0.26);
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.4);
 }
+
+/* ── Buttons ────────────────────────────────────────────────────────────────── */
 .glass-button {
-  background: rgba(125, 211, 252, 0.15);
-  border: 1px solid rgba(125, 211, 252, 0.3);
+  background: rgba(27, 122, 82, 0.14);
+  border: 1px solid rgba(27, 122, 82, 0.3);
   transition: all 0.2s ease;
+  color: #a8d5bc;
 }
 .glass-button:hover {
-  background: rgba(125, 211, 252, 0.25);
-  box-shadow: 0 0 15px rgba(125, 211, 252, 0.1);
+  background: rgba(27, 122, 82, 0.24);
+  box-shadow: 0 0 14px rgba(27, 122, 82, 0.12);
 }
+
 .glass-button-primary {
-  background: rgba(125, 211, 252, 0.8);
-  color: #0a0e1a;
-  border: 1px solid rgba(125, 211, 252, 1);
+  background: #1b7a52;
+  color: #dff0e8;
+  border: 1px solid #1b7a52;
   transition: all 0.2s ease;
 }
 .glass-button-primary:hover {
-  background: rgba(125, 211, 252, 1);
-  box-shadow: 0 0 20px rgba(125, 211, 252, 0.4);
+  background: #0f5c3a;
+  box-shadow: 0 0 18px rgba(27, 122, 82, 0.35);
 }
+
 .glass-button-secondary {
-  background: rgba(26, 36, 56, 0.5);
-  border: 1px solid rgba(160, 180, 196, 0.2);
+  background: rgba(7, 26, 16, 0.45);
+  border: 1px solid rgba(27, 122, 82, 0.15);
+  color: #a8d5bc;
   transition: all 0.2s ease;
 }
 .glass-button-secondary:hover {
-  background: rgba(26, 36, 56, 0.8);
-  border-color: rgba(160, 180, 196, 0.4);
+  background: rgba(7, 26, 16, 0.7);
+  border-color: rgba(27, 122, 82, 0.3);
 }
+
+/* ── Input ──────────────────────────────────────────────────────────────────── */
 .glass-input {
-  background: rgba(15, 21, 36, 0.4);
-  border: 1px solid rgba(125, 211, 252, 0.1);
+  background: rgba(7, 26, 16, 0.4);
+  border: 1px solid rgba(27, 122, 82, 0.18);
+  color: #dff0e8;
   transition: all 0.2s ease;
 }
+.glass-input:focus,
 .glass-input:focus-within {
-  border-color: rgba(125, 211, 252, 0.5);
-  box-shadow: 0 0 15px rgba(125, 211, 252, 0.1);
+  border-color: rgba(27, 122, 82, 0.5);
+  box-shadow: 0 0 0 3px rgba(27, 122, 82, 0.1);
+  outline: none;
 }
-.glow-text {
-  text-shadow: 0 0 10px rgba(125, 211, 252, 0.3);
-}
+
+/* ── Text tokens ────────────────────────────────────────────────────────────── */
+.text-on-surface         { color: #dff0e8; }
+.text-on-surface-variant { color: #7aaa8e; }
+.text-primary            { color: #1b7a52; }
+.glow-text               { text-shadow: 0 0 12px rgba(27, 122, 82, 0.4); }
+
+/* ── Background tokens ──────────────────────────────────────────────────────── */
+.bg-surface                { background: #071a10; }
+.bg-surface-container      { background: rgba(7, 26, 16, 0.52); }
+.bg-surface-container-low  { background: rgba(7, 26, 16, 0.38); }
+.bg-surface-container-high { background: rgba(15, 40, 25, 0.6); }
+.bg-primary-soft           { background: rgba(27, 122, 82, 0.15); }
+
+/* ── Status / badge ─────────────────────────────────────────────────────────── */
 .status-badge {
-  background: rgba(26, 36, 56, 0.6);
-  border: 1px solid rgba(160, 180, 196, 0.15);
+  background: rgba(15, 40, 25, 0.6);
+  border: 1px solid rgba(27, 122, 82, 0.15);
+  color: #7aaa8e;
 }
-.status-badge.awaiting {
-  background: rgba(200, 160, 240, 0.15);
-  border-color: rgba(200, 160, 240, 0.3);
-  color: #c8a0f0;
+.status-badge.active {
+  background: rgba(27, 122, 82, 0.18);
+  border-color: rgba(27, 122, 82, 0.4);
+  color: #1b7a52;
 }
-.status-badge.generated {
-  background: rgba(125, 211, 252, 0.15);
-  border-color: rgba(125, 211, 252, 0.3);
-  color: #7dd3fc;
+.status-badge.warning {
+  background: rgba(120, 80, 10, 0.25);
+  border-color: rgba(217, 119, 6, 0.35);
+  color: #d97706;
 }
-.alert-banner {
-  background: rgba(61, 20, 20, 0.4);
-  border: 1px solid rgba(255, 107, 107, 0.3);
-  box-shadow: 0 0 30px rgba(255, 107, 107, 0.05);
+.status-badge.danger {
+  background: rgba(100, 20, 20, 0.3);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
 }
+
+/* ── Ambient glows ──────────────────────────────────────────────────────────── */
 .ambient-glow-primary {
   position: absolute;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(125, 211, 252, 0.06), transparent 70%);
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(27, 122, 82, 0.07), transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
 .ambient-glow-tertiary {
   position: absolute;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(200, 160, 240, 0.04), transparent 70%);
+  width: 620px;
+  height: 620px;
+  background: radial-gradient(circle, rgba(10, 92, 53, 0.05), transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
+
+/* ── Alert banner ───────────────────────────────────────────────────────────── */
+.alert-banner {
+  background: rgba(100, 20, 20, 0.35);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  box-shadow: 0 0 28px rgba(239, 68, 68, 0.05);
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(27, 122, 82, 0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(27, 122, 82, 0.5); }
