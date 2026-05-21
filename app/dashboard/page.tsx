@@ -156,7 +156,7 @@ function WatchlistCard() {
           No items yet — add an MPN above.
         </div>
       ) : (
-        <div style={{ divide: 'rgba(27,122,82,0.08)' }}>
+        <div>
           {items.map(item => (
             <div
               key={item.id}
