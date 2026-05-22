@@ -290,7 +290,7 @@ export default function DashboardPage() {
         {monitored.length === 0 ? (
           <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 13, color: C.mutedLight }}>
             No components monitored yet —{' '}
-            <a href="/dashboard/bom" style={{ color: C.green, textDecoration: 'underline' }}>upload a BOM to get started</a>
+            <a href="/dashboard/chat" style={{ color: C.green, textDecoration: 'underline' }}>upload a BOM to get started</a>
           </div>
         ) : (
           <div className="overflow-x-auto">
