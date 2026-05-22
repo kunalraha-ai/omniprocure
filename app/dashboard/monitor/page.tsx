@@ -205,7 +205,7 @@ export default function DashboardMonitorPage() {
                   <p className="font-semibold" style={{ color: C.text }}>No components monitored yet</p>
                   <p className="mt-1 text-sm" style={{ color: C.muted }}>Upload a BOM to start tracking.</p>
                 </div>
-                <Link href="/dashboard/bom">
+                <Link href="/dashboard/chat">
                   <button className="flex items-center gap-2 text-sm font-semibold"
                     style={{ background: C.text, color: '#dff0e8', padding: '10px 22px', borderRadius: 50, border: `2.5px solid ${C.text}` }}>
                     <Upload className="w-4 h-4" /> Upload BOM
@@ -368,7 +368,7 @@ export default function DashboardMonitorPage() {
           </div>
 
           {/* Add via BOM */}
-          <Link href="/dashboard/bom" className="w-full">
+          <Link href="/dashboard/chat" className="w-full">
             <button className="w-full flex items-center justify-center gap-2 text-sm font-semibold transition-all"
               style={{ background: 'transparent', border: `2.5px solid ${C.text}`, color: C.text, padding: '11px 0', borderRadius: 50 }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(7,26,16,0.05)'}
