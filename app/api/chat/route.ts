@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { fetchOemSecrets, logAuditEvent, supabaseAdmin } from "@/lib/procurement";
+import { flushLangfuse, getLangfuseClient } from "@/lib/langfuse";
 
 export const maxDuration = 60;
 
@@ -277,6 +278,20 @@ export async function POST(req: NextRequest) {
 
     const sid = sessionId ?? `session-${Date.now()}`;
     const userId = user.id;
+    const lf = getLangfuseClient();
+    let trace: any = null;
+    if (lf) {
+      try {
+        trace = lf.trace({
+          id: `chat-${sid}-${Date.now()}`,
+          name: "chat-turn",
+          userId,
+          sessionId: sid,
+          input: message,
+          metadata: { sessionId: sid },
+        });
+      } catch {}
+    }
 
     // Load history scoped to this user + session
     const { data: historyRows } = await supabaseAdmin
@@ -307,6 +322,22 @@ export async function POST(req: NextRequest) {
 
     while (iterations < MAX_ITERATIONS) {
       iterations++;
+      let iterSpan: any = null;
+      let gen: any = null;
+      try {
+        iterSpan = trace?.span({
+          name: `iteration-${iterations}`,
+          input: { messageCount: currentMessages.length },
+        });
+      } catch {}
+      try {
+        gen = trace?.generation({
+          name: "claude-sonnet-chat",
+          model: "claude-sonnet-4-20250514",
+          input: currentMessages,
+          startTime: new Date(),
+        });
+      } catch {}
 
       const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -349,8 +380,27 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
       const claudeData = await claudeRes.json();
 
       if (!claudeRes.ok) {
+        try {
+          iterSpan?.end({ level: "ERROR", statusMessage: `Claude API error: ${claudeRes.status}` });
+          gen?.end({ level: "ERROR", statusMessage: `Claude API error: ${claudeRes.status}` });
+        } catch {}
         throw new Error(`Claude API error: ${JSON.stringify(claudeData)}`);
       }
+
+      try {
+        iterSpan?.end({ output: { stopReason: claudeData.stop_reason } });
+      } catch {}
+      try {
+        gen?.end({
+          output: claudeData.content,
+          usage: {
+            input: claudeData.usage?.input_tokens ?? 0,
+            output: claudeData.usage?.output_tokens ?? 0,
+            total: (claudeData.usage?.input_tokens ?? 0) + (claudeData.usage?.output_tokens ?? 0),
+            unit: "TOKENS",
+          },
+        });
+      } catch {}
 
       if (claudeData.stop_reason === "end_turn") {
         finalText = claudeData.content
@@ -364,13 +414,25 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
         const toolUseBlocks = claudeData.content.filter((b: any) => b.type === "tool_use");
         currentMessages = [...currentMessages, { role: "assistant", content: claudeData.content }];
 
-        const toolResults = await Promise.all(
-          toolUseBlocks.map(async (block: any) => ({
+        const toolResults = [];
+        for (const block of toolUseBlocks) {
+          let toolSpan: any = null;
+          try {
+            toolSpan = trace?.span({
+              name: `tool:${block.name}`,
+              input: block.input,
+            });
+          } catch {}
+          const content = await executeTool(block.name, block.input);
+          try {
+            toolSpan?.end({ output: content });
+          } catch {}
+          toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
-            content: await executeTool(block.name, block.input),
-          }))
-        );
+            content,
+          });
+        }
 
         currentMessages = [...currentMessages, { role: "user", content: toolResults }];
         continue;
@@ -397,10 +459,16 @@ Current date: ${new Date().toISOString().split("T")[0]}`,
       details: { sessionId: sid, userId, userMessage: message.slice(0, 100), iterations },
     });
 
+    try {
+      trace?.update({ output: finalText });
+    } catch {}
+    await flushLangfuse();
+
     return NextResponse.json({ success: true, sessionId: sid, reply: finalText });
 
   } catch (err: any) {
     console.error("[Chat] Error:", err?.message);
+    await flushLangfuse();
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { getLangfuseClient } from "./langfuse";
 
 // ── Supabase (service role — server only) ─────────────────────────────────────
 export const supabaseAdmin = createClient(
@@ -106,6 +107,19 @@ export interface HitlRequest {
   createdAt: string;
   status: "pending" | "approved" | "rejected" | "modified";
   modifiedNote?: string;
+}
+
+/**
+ * Passed into claudeJson() and draftCounterOffer() to attach observability
+ * context. All fields are optional — callers that don't have a userId or
+ * sessionId can omit them and only supply spanName.
+ */
+export interface TraceContext {
+  traceId?: string;
+  spanName: string;
+  userId?: string;
+  sessionId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // ── Currency helpers ──────────────────────────────────────────────────────────
@@ -224,7 +238,6 @@ export async function fetchOemSecrets(mpn: string, source = "unknown"): Promise<
   if (!res.ok) throw new Error(`OEM Secrets API error: ${res.status}`);
   const data: OemSecretsResponse = await res.json();
   if (!data.stock?.length) return [];
-  // Log this API call (fire and forget)
   logApiCall(mpn, source).catch(() => {});
   const mapped = data.stock.map(item => mapToSupplierResult(item, mpn));
   const deduped = deduplicateBySupplier(mapped);
@@ -270,9 +283,46 @@ export async function fetchVariants(mpn: string): Promise<VariantResult[]> {
 }
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
-async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000): Promise<T | null> {
+
+/**
+ * Core Claude call helper. Accepts an optional TraceContext to attach a
+ * Langfuse generation to the call. When traceCtx is omitted, the call is
+ * untraced — no Langfuse overhead at all.
+ *
+ * The spanName in traceCtx always wins — callers should set it explicitly
+ * rather than relying on any merge. This avoids the spread-order bug where
+ * a caller-supplied spanName could be silently overwritten.
+ */
+async function claudeJson<T>(
+  prompt: string,
+  maxTokens: number,
+  timeout = 12_000,
+  traceCtx?: TraceContext
+): Promise<T | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
+
+  // ── Langfuse generation start ─────────────────────────────────────────────
+  let generation: ReturnType<NonNullable<ReturnType<typeof getLangfuseClient>>["generation"]> | null = null;
+  if (traceCtx) {
+    try {
+      const lf = getLangfuseClient();
+      if (lf) {
+        generation = lf.generation({
+          name: traceCtx.spanName,
+          model: "claude-haiku-4-5-20251001",
+          input: prompt,
+          metadata: {
+            ...traceCtx.metadata,
+            ...(traceCtx.userId ? { userId: traceCtx.userId } : {}),
+            ...(traceCtx.sessionId ? { sessionId: traceCtx.sessionId } : {}),
+          },
+          startTime: new Date(),
+        });
+      }
+    } catch { /* never throw from observability code */ }
+  }
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -288,6 +338,7 @@ async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000
       }),
       signal: AbortSignal.timeout(timeout),
     });
+
     if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
     const d = await res.json();
     const text: string = d?.content?.[0]?.text ?? "";
@@ -306,28 +357,61 @@ async function claudeJson<T>(prompt: string, maxTokens: number, timeout = 12_000
 
     if (!candidate) throw new Error("No JSON in response");
     const trimmed = candidate.trim();
-    if (trimmed[0] !== '[' && trimmed[0] !== '{') throw new Error("Not valid JSON");
-    if (trimmed[0] === '[' && trimmed[1] !== '{' && trimmed[1] !== ']' && trimmed[1] !== '\n' && trimmed[1] !== ' ') {
-      throw new Error("Array does not contain objects");
+    if (trimmed[0] !== "[" && trimmed[0] !== "{") throw new Error("Not valid JSON");
+
+    let parsed: T;
+    try {
+      parsed = JSON.parse(trimmed) as T;
+    } catch (parseErr: any) {
+      try {
+        generation?.end({ level: "ERROR", statusMessage: `JSON parse failed: ${parseErr?.message}` });
+      } catch {}
+      throw parseErr;
     }
-    return JSON.parse(trimmed) as T;
+
+    // ── Langfuse generation end (success) ────────────────────────────────────
+    try {
+      generation?.end({
+        output: text,
+        usage: {
+          input: d.usage?.input_tokens ?? 0,
+          output: d.usage?.output_tokens ?? 0,
+          total: (d.usage?.input_tokens ?? 0) + (d.usage?.output_tokens ?? 0),
+          unit: "TOKENS",
+        },
+      });
+    } catch {}
+
+    return parsed;
   } catch (err: any) {
-    console.error(`[Claude] Error: ${err?.message}`);
+    // ── Langfuse generation end (error) ──────────────────────────────────────
+    try {
+      generation?.end({ level: "ERROR", statusMessage: err?.message });
+    } catch {}
+    console.error(`[Claude][${traceCtx?.spanName ?? "claudeJson"}] Error: ${err?.message}`);
     return null;
   }
 }
 
-export async function rankWithClaude(mpn: string, suppliers: SupplierResult[]): Promise<ClaudeRanking> {
+// ── Exported procurement functions ────────────────────────────────────────────
+
+export async function rankWithClaude(
+  mpn: string,
+  suppliers: SupplierResult[],
+  traceCtx?: TraceContext
+): Promise<ClaudeRanking> {
   const fallback = (): ClaudeRanking => {
     const actionable = suppliers.filter(s => s.hasPrice && s.stock > 0);
     const pool = actionable.length ? actionable : suppliers.filter(s => s.hasPrice);
     if (!pool.length) return { winner: suppliers[0]?.supplier ?? "—", reason: "Only available option.", recommendedIndex: 0 };
     const best = pool.reduce((bi, s, i) => ((s.price ?? 9999) < (pool[bi].price ?? 9999) ? i : bi), 0);
     const idx = suppliers.findIndex(s => s.supplier === pool[best].supplier);
-    return { winner: suppliers[idx].supplier, reason: `Best price with stock available.`, recommendedIndex: idx };
+    return { winner: suppliers[idx].supplier, reason: "Best price with stock available.", recommendedIndex: idx };
   };
+
   const actionable = suppliers.filter(s => s.hasPrice && s.stock > 0);
   if (actionable.length <= 1) return fallback();
+
   const result = await claudeJson<ClaudeRanking>(
     `You are a procurement expert. Pick the single best supplier for "${mpn}".
 Scoring: stock availability 40%, unit price 35%, lead time & reliability 25%.
@@ -341,13 +425,24 @@ ${JSON.stringify(actionable.slice(0, 30).map(s => ({
 
 Respond ONLY with raw JSON (no markdown):
 {"winner":"<name>","recommendedIndex":<n>,"reason":"<max 120 chars>"}`,
-    200
+    200,
+    12_000,
+    {
+      spanName: "rankWithClaude",
+      userId: traceCtx?.userId,
+      sessionId: traceCtx?.sessionId,
+      metadata: { mpn, supplierCount: suppliers.length, ...traceCtx?.metadata },
+    }
   );
+
   if (!result || typeof result.winner !== "string") return fallback();
   return result;
 }
 
-export async function suggestEquivalentICs(mpn: string): Promise<Array<{ mpn: string; manufacturer: string; description: string; whyEquivalent: string }>> {
+export async function suggestEquivalentICs(
+  mpn: string,
+  traceCtx?: TraceContext
+): Promise<Array<{ mpn: string; manufacturer: string; description: string; whyEquivalent: string }>> {
   const result = await claudeJson<Array<{ mpn: string; manufacturer: string; description: string; whyEquivalent: string }>>(
     `You are an electronics engineer. Suggest exactly 3 functionally equivalent ICs to "${mpn}".
 Rules:
@@ -357,8 +452,16 @@ Rules:
 
 Respond ONLY with raw JSON array (no markdown):
 [{"mpn":"<exact MPN>","manufacturer":"<name>","description":"<10 words max>","whyEquivalent":"<max 100 chars>"}]`,
-    600
+    600,
+    12_000,
+    {
+      spanName: "suggestEquivalentICs",
+      userId: traceCtx?.userId,
+      sessionId: traceCtx?.sessionId,
+      metadata: { mpn, ...traceCtx?.metadata },
+    }
   );
+
   if (!Array.isArray(result)) return [];
   return result.slice(0, 3).filter(i => typeof i.mpn === "string" && i.mpn.length > 0);
 }
@@ -375,7 +478,7 @@ export async function fetchEquivalentICs(mpn: string): Promise<EquivalentIC[]> {
 }
 
 // ── BOM parsing ───────────────────────────────────────────────────────────────
-export async function parseBomWithClaude(rawData: string): Promise<BomLineItem[]> {
+export async function parseBomWithClaude(rawData: string, userId?: string): Promise<BomLineItem[]> {
   const result = await claudeJson<BomLineItem[]>(
     `Extract all electronic component line items from this BOM data.
 You MUST respond with ONLY a JSON array. No explanation, no markdown, no code blocks.
@@ -385,14 +488,26 @@ Each item: {"mpn":"string","description":"string","qty":1,"manufacturer":"string
 
 BOM data:
 ${rawData.slice(0, 8000)}`,
-    2000
+    2000,
+    12_000,
+    {
+      spanName: "parseBomWithClaude",
+      userId,
+      metadata: { rawLength: rawData.length },
+    }
   );
+
   if (!Array.isArray(result)) return [];
   return result.filter(i => typeof i.mpn === "string" && i.mpn.length > 0);
 }
 
 // ── Quote analysis ────────────────────────────────────────────────────────────
-export async function analyzeQuoteEmail(emailText: string, from: string, subject: string) {
+export async function analyzeQuoteEmail(
+  emailText: string,
+  from: string,
+  subject: string,
+  traceCtx?: TraceContext
+) {
   return claudeJson<{
     supplier: string; mpn: string; unitPrice: number; currency: string;
     moq: number; leadTime: string; validUntil: string; notes: string;
@@ -405,16 +520,49 @@ Body: ${emailText.slice(0, 4000)}
 
 Return ONLY raw JSON (no markdown):
 {"supplier":"string","mpn":"string","unitPrice":0,"currency":"USD","moq":1,"leadTime":"string","validUntil":"string","notes":"string","shouldNegotiate":true,"negotiationReason":"string"}`,
-    1000
+    1000,
+    12_000,
+    {
+      spanName: "analyzeQuoteEmail",
+      userId: traceCtx?.userId,
+      sessionId: traceCtx?.sessionId,
+      metadata: { from, subject, ...traceCtx?.metadata },
+    }
   );
 }
 
 export async function draftCounterOffer(
-  supplier: string, mpn: string, unitPrice: number,
-  currency: string, moq: number, negotiationReason: string
+  supplier: string,
+  mpn: string,
+  unitPrice: number,
+  currency: string,
+  moq: number,
+  negotiationReason: string,
+  traceCtx?: TraceContext
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return `Dear ${supplier},\n\nWe would like to negotiate the price for ${mpn}.\n\nBest regards,\nProcurement Team`;
+  const fallbackEmail = `Dear ${supplier},\n\nWe would like to negotiate the price for ${mpn}.\n\nBest regards,\nProcurement Team`;
+  if (!apiKey) return fallbackEmail;
+
+  // ── Langfuse generation start ─────────────────────────────────────────────
+  let generation: ReturnType<NonNullable<ReturnType<typeof getLangfuseClient>>["generation"]> | null = null;
+  try {
+    const lf = getLangfuseClient();
+    if (lf) {
+      generation = lf.generation({
+        name: traceCtx?.spanName ?? "draftCounterOffer",
+        model: "claude-haiku-4-5-20251001",
+        input: { supplier, mpn, unitPrice, currency, moq, negotiationReason },
+        metadata: {
+          ...traceCtx?.metadata,
+          ...(traceCtx?.userId ? { userId: traceCtx.userId } : {}),
+          ...(traceCtx?.sessionId ? { sessionId: traceCtx.sessionId } : {}),
+        },
+        startTime: new Date(),
+      });
+    }
+  } catch {}
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -437,9 +585,29 @@ Return ONLY the plain text email body — no subject line, no JSON.`,
       }),
       signal: AbortSignal.timeout(12_000),
     });
+
+    if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
     const d = await res.json();
-    return d?.content?.[0]?.text ?? `Dear ${supplier},\n\nThank you for your quote for ${mpn}.\n\nBest regards,\nProcurement Team`;
-  } catch {
+    const text = d?.content?.[0]?.text ?? fallbackEmail;
+
+    try {
+      generation?.end({
+        output: text,
+        usage: {
+          input: d.usage?.input_tokens ?? 0,
+          output: d.usage?.output_tokens ?? 0,
+          total: (d.usage?.input_tokens ?? 0) + (d.usage?.output_tokens ?? 0),
+          unit: "TOKENS",
+        },
+      });
+    } catch {}
+
+    return text;
+  } catch (err: any) {
+    try {
+      generation?.end({ level: "ERROR", statusMessage: err?.message });
+    } catch {}
+    console.error(`[Claude][draftCounterOffer] Error: ${err?.message}`);
     return `Dear ${supplier},\n\nThank you for your quote for ${mpn}. We would like to discuss the pricing further.\n\nBest regards,\nProcurement Team`;
   }
 }
@@ -472,7 +640,7 @@ Payment due within 30 days of invoice receipt.`;
 }
 
 // ── Price / stock monitor ─────────────────────────────────────────────────────
-export async function analyzeMarketData(stockData: SupplierResult[]) {
+export async function analyzeMarketData(stockData: SupplierResult[], traceCtx?: TraceContext) {
   const byMpn: Record<string, SupplierResult[]> = {};
   for (const s of stockData) {
     if (!s.mpn) continue;
@@ -506,7 +674,14 @@ Respond ONLY with raw JSON:
 {"alert":false,"urgency":"none","summary":"All clear","recommendation":"hold","flaggedParts":[]}
 
 If flagging, set alert:true, pick urgency (low/medium/high), write a 1-sentence summary, and list the affected MPNs in flaggedParts.`,
-    600
+    600,
+    12_000,
+    {
+      spanName: "analyzeMarketData",
+      userId: traceCtx?.userId,
+      sessionId: traceCtx?.sessionId,
+      metadata: { partCount: stockData.length, ...traceCtx?.metadata },
+    }
   );
 }
 

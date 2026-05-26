@@ -13,6 +13,7 @@ import {
   BomLineItem,
   SupplierResult,
 } from "@/lib/procurement";
+import { flushLangfuse, getLangfuseClient } from "@/lib/langfuse";
 
 export const maxDuration = 60;
 
@@ -57,6 +58,17 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      const results: BomLineResult[] = [];
+      let trace: any = null;
+      try {
+        const lf = getLangfuseClient();
+        trace = lf?.trace({
+          name: "bom-upload",
+          userId: userId ?? undefined,
+          input: { filename, rawLength: raw.length },
+          metadata: { filename },
+        });
+      } catch {}
       let closed = false;
       const send = (type: string, data: unknown) => {
         if (closed) return;
@@ -72,7 +84,14 @@ export async function POST(req: NextRequest) {
       try {
         send("started", { message: "Parsing BOM with Claude…" });
 
-        const lineItems = await parseBomWithClaude(raw);
+        let parseSpan: any = null;
+        try {
+          parseSpan = trace?.span({ name: "parse-bom", input: { rawLength: raw.length } });
+        } catch {}
+        const lineItems = await parseBomWithClaude(raw, userId ?? undefined);
+        try {
+          parseSpan?.end({ output: { itemCount: lineItems.length } });
+        } catch {}
         if (!lineItems.length) {
           send("error", { message: "Could not extract any line items from BOM. Check format." });
           close();
@@ -82,7 +101,10 @@ export async function POST(req: NextRequest) {
         send("parsed", { count: lineItems.length, items: lineItems });
         send("searching", { message: `Searching ${lineItems.length} parts across 140+ distributors…` });
 
-        const results: BomLineResult[] = [];
+        let sourceSpan: any = null;
+        try {
+          sourceSpan = trace?.span({ name: "source-parts", input: { partCount: lineItems.length } });
+        } catch {}
 
         await Promise.allSettled(
           lineItems.map(async (item) => {
@@ -116,6 +138,16 @@ export async function POST(req: NextRequest) {
             });
           })
         );
+
+        try {
+          sourceSpan?.end({
+            output: {
+              sourced: results.filter(r => r.status === "sourced").length,
+              partial: results.filter(r => r.status === "partial").length,
+              unfound: results.filter(r => r.status === "unfound").length,
+            },
+          });
+        } catch {}
 
         // Save to Supabase — stamp user_id on every row
         try {
@@ -174,6 +206,10 @@ export async function POST(req: NextRequest) {
         console.error("[BOM] Fatal:", err?.message);
         send("error", { message: err?.message ?? "Unknown error" });
       } finally {
+        try {
+          trace?.update({ output: { totalItems: results.length } });
+        } catch {}
+        await flushLangfuse();
         close();
       }
     },
