@@ -9,13 +9,29 @@ interface Alert { id: string; mpn: string; urgency: Urgency; summary: string; re
 type FetchState = 'idle' | 'loading' | 'success' | 'error'
 type TabFilter = 'all' | Urgency | 'unread'
 
+// ─── Steel Gray + Sky Blue tokens ───────────────────────────────────────────
 const C = {
-  green: '#1b7a52', greenDark: '#0a5c35', greenSoft: '#e8f7ef', greenBorder: 'rgba(27,122,82,0.25)',
-  text: '#071a10', muted: '#3e6b52', mutedLight: '#7aaa8e',
-  card: '#ffffff', cardBorder: 'rgba(10,34,24,0.08)', cardShadow: '0 2px 16px rgba(10,34,24,0.06)',
-  rowHover: 'rgba(27,122,82,0.03)', divider: '#f0f4f2',
-  warn: '#7a4f0a', warnSoft: '#fef3e2', warnBorder: 'rgba(217,119,6,0.3)',
-  danger: '#7a1a0a', dangerSoft: '#fdecea', dangerBorder: 'rgba(248,113,113,0.3)',
+  bg:          '#1c202a',
+  sidebar:     '#232833',
+  green:       '#5ebcf8', // Sky Blue
+  greenDark:   '#7dd3fc',
+  greenSoft:   'rgba(94, 188, 248, 0.10)',
+  greenBorder: 'rgba(94, 188, 248, 0.25)',
+  text:        '#f1f5f9',
+  muted:       '#94a3b8',
+  mutedLight:  '#64748b',
+  card:        '#232833',
+  cardBorder:  '#2f3644',
+  cardShadow:  '6px 6px 12px #12141a, -6px -6px 12px #2d3443',
+  shadowInner: 'inset 3px 3px 6px #12141a, inset -3px -3px 6px #2d3443',
+  divider:     '#2f3644',
+  rowHover:    'rgba(94, 188, 248, 0.03)',
+  warn:        '#fbbf24',
+  warnSoft:    'rgba(245, 158, 11, 0.12)',
+  warnBorder:  'rgba(245, 158, 11, 0.3)',
+  danger:      '#f87171',
+  dangerSoft:  'rgba(239, 68, 68, 0.12)',
+  dangerBorder:'rgba(239, 68, 68, 0.3)',
 }
 
 const TABS: { value: TabFilter; label: string }[] = [
@@ -35,7 +51,7 @@ function UrgencyBadge({ urgency }: { urgency: Urgency }) {
   const styles: Record<Urgency, { bg: string; color: string; border: string }> = {
     high:   { bg: C.dangerSoft, color: C.danger, border: C.dangerBorder },
     medium: { bg: C.warnSoft,   color: C.warn,   border: C.warnBorder   },
-    low:    { bg: C.greenSoft,  color: C.greenDark, border: C.greenBorder },
+    low:    { bg: C.greenSoft,  color: C.green, border: C.greenBorder },
   }
   const s = styles[urgency]
   return (
@@ -105,38 +121,51 @@ export default function DashboardAlertsPage() {
     <div style={{ fontFamily: "'DM Sans', sans-serif", color: C.text, display: 'flex', flexDirection: 'column', gap: 24 }}>
 
       {/* Header */}
-      <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 18, padding: '24px 28px' }}>
-        <p style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDark, letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 8 }}>Supply Chain Monitor</p>
+      <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 24, padding: '28px 32px' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: C.green, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>Active Sourcing Feeds</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: C.text, letterSpacing: '-1px', margin: 0 }}>Alerts</h1>
+          <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: C.text, letterSpacing: '-1px', margin: 0 }}>Active Alerts</h1>
           {unread > 0 && (
-            <span style={{ background: C.dangerSoft, color: C.danger, border: `1px solid ${C.dangerBorder}`, fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 50 }}>{unread} unread</span>
+            <span style={{ background: C.dangerSoft, color: C.danger, border: `1px solid ${C.dangerBorder}`, fontSize: 12, fontWeight: 700, padding: '2px 12px', borderRadius: 50 }}>{unread} unread</span>
           )}
         </div>
-        <p style={{ marginTop: 6, fontSize: 14, color: C.muted }}>Review supply chain alerts and take action on critical issues.</p>
+        <p style={{ marginTop: 6, fontSize: 14.5, color: C.muted }}>Review system alerts, single source warnings, and inventory anomalies.</p>
 
-        {/* Stat mini-cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 20 }}>
-          {[['High Priority', isLoading ? '—' : String(high), C.danger, C.dangerSoft, C.dangerBorder], ['Unread', isLoading ? '—' : String(unread), C.warn, C.warnSoft, C.warnBorder], ['Total Alerts', isLoading ? '—' : String(alerts.length), C.text, C.greenSoft, C.greenBorder]].map(([label, val, color, bg, border]) => (
-            <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 14, padding: '14px 16px' }}>
-              <p style={{ fontSize: 10.5, fontWeight: 600, color: C.mutedLight, textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</p>
-              <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, color, letterSpacing: '-1px', marginTop: 6 }}>{val}</p>
+        {/* Bento metric blocks */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 24 }}>
+          {[
+            ['High Priority Warnings', isLoading ? '—' : String(high), C.danger, C.dangerSoft, C.dangerBorder],
+            ['Unread Notifications', isLoading ? '—' : String(unread), C.warn, C.warnSoft, C.warnBorder],
+            ['Cumulative Alerts', isLoading ? '—' : String(alerts.length), C.green, C.greenSoft, C.greenBorder]
+          ].map(([label, val, color, bg, border]) => (
+            <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 18, padding: '16px 20px', boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.1)' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>{label}</p>
+              <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, color, letterSpacing: '-1px', marginTop: 8, marginBottom: 0, lineHeight: 1 }}>{val}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {TABS.map(t => {
             const active = tab === t.value
             return (
               <button key={t.value} onClick={() => setTab(t.value)} disabled={isLoading}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 50, fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', transition: 'all 0.15s', background: active ? C.text : 'transparent', color: active ? '#dff0e8' : C.muted, border: `1.5px solid ${active ? C.text : C.cardBorder}` }}>
+                className={active ? "" : "shadow-neu-raised-sm"}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', borderRadius: 50, fontSize: 13,
+                  fontWeight: active ? 800 : 600, cursor: 'pointer', transition: 'all 0.15s',
+                  background: active ? C.green : C.card,
+                  color: active ? C.bg : C.muted,
+                  border: active ? 'none' : `1px solid ${C.cardBorder}`,
+                  boxShadow: active ? 'inset 2px 2px 4px rgba(0,0,0,0.2)' : undefined
+                }}>
                 {t.label}
-                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 50, background: active ? 'rgba(255,255,255,0.2)' : C.greenSoft, color: active ? '#dff0e8' : C.muted }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 50, background: active ? 'rgba(0,0,0,0.12)' : C.greenSoft, color: active ? C.bg : C.green }}>
                   {isLoading ? '—' : tabCount(t.value)}
                 </span>
               </button>
@@ -147,92 +176,96 @@ export default function DashboardAlertsPage() {
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={markAllRead} disabled={isLoading || markingAll || unread === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 50, fontSize: 13, fontWeight: 600, background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}`, cursor: unread > 0 ? 'pointer' : 'not-allowed', opacity: unread === 0 ? 0.5 : 1 }}>
-            {markingAll ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />} Mark all read
+            className="shadow-neu-raised-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 50, fontSize: 13, fontWeight: 700, background: C.card, color: C.green, border: `1.5px solid ${C.cardBorder}`, cursor: unread > 0 ? 'pointer' : 'not-allowed', opacity: unread === 0 ? 0.5 : 1 }}>
+            {markingAll ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />} Resolve all
           </button>
           <button onClick={fetchAlerts} disabled={isLoading}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 50, fontSize: 13, fontWeight: 600, background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}`, cursor: 'pointer' }}>
+            className="shadow-neu-raised-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 50, fontSize: 13, fontWeight: 700, background: C.card, color: C.green, border: `1.5px solid ${C.cardBorder}`, cursor: 'pointer' }}>
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
       </div>
 
       {/* Search */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, borderRadius: 50, padding: '8px 16px', width: 280 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.bg, border: `1.5px solid ${C.cardBorder}`, borderRadius: 50, padding: '9px 18px', width: 280, boxShadow: C.shadowInner }}>
         <Search size={15} style={{ color: C.mutedLight, flexShrink: 0 }} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search MPN or summary…" disabled={isLoading}
           style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: C.text, width: '100%' }} />
       </div>
 
       {/* Table card */}
-      <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 18, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.divider}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Bell size={16} style={{ color: C.muted }} />
-          <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>Active Alerts</span>
+      <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 24, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: `1.5px solid ${C.divider}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Bell size={16} style={{ color: C.green }} />
+          <span style={{ fontSize: 14, fontWeight: 800, color: C.text }}>Inbox Warnings</span>
         </div>
 
         {isLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 0', color: C.muted }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 0', color: C.muted }}>
             <Loader2 size={18} className="animate-spin" style={{ color: C.green }} />
-            <span style={{ fontSize: 13 }}>Loading alerts…</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>Syncing alert logs…</span>
           </div>
         )}
 
         {fetchState === 'error' && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '48px 20px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '64px 20px', textAlign: 'center' }}>
             <AlertTriangle size={28} style={{ color: C.danger }} />
-            <p style={{ fontWeight: 600, color: C.text }}>Failed to load alerts</p>
+            <p style={{ fontWeight: 800, color: C.text, fontSize: 16 }}>Failed to load alerts</p>
             <p style={{ fontSize: 13, color: C.muted }}>{errMsg}</p>
-            <button onClick={fetchAlerts} style={{ padding: '8px 18px', borderRadius: 50, fontSize: 13, fontWeight: 600, background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}`, cursor: 'pointer' }}>Try again</button>
+            <button onClick={fetchAlerts} style={{ padding: '9px 20px', borderRadius: 50, fontSize: 13, fontWeight: 700, background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}`, cursor: 'pointer' }}>Try again</button>
           </div>
         )}
 
         {fetchState === 'success' && alerts.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '48px 20px', textAlign: 'center' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '64px 20px', textAlign: 'center' }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Bell size={20} style={{ color: C.green }} />
             </div>
-            <p style={{ fontWeight: 600, color: C.text }}>No alerts yet</p>
-            <p style={{ fontSize: 13, color: C.muted, maxWidth: 340 }}>OmniProcure will notify you here when price changes or stock issues are detected.</p>
+            <p style={{ fontWeight: 800, color: C.text, fontSize: 16 }}>No alerts found</p>
+            <p style={{ fontSize: 13, color: C.muted, maxWidth: 360, margin: 0 }}>Sourcing channels are reporting healthy. Anomaly checks are running in background.</p>
           </div>
         )}
 
         {fetchState === 'success' && alerts.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#f7fbf9', borderBottom: `1px solid ${C.divider}` }}>
-                  <th style={{ width: 16, padding: '10px 20px' }} />
-                  {['MPN', 'Summary', 'Recommendation', 'Urgency', 'Time', 'Read', ''].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: C.mutedLight, letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
+                <tr style={{ background: C.bg, borderBottom: `1.5px solid ${C.divider}` }}>
+                  <th style={{ width: 24, padding: '12px 20px' }} />
+                  {['MPN', 'Summary', 'Action Recommendation', 'Urgency', 'Time', 'Action', ''].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: C.muted, letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: C.mutedLight }}>No alerts match your filters.</td></tr>
+                  <tr><td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center', fontSize: 13, color: C.muted }}>No alerts match your filter criteria.</td></tr>
                 ) : filtered.map(alert => (
                   <tr key={alert.id} onClick={() => { if (!alert.is_read) markRead(alert.id, true) }}
                     style={{ borderBottom: `1px solid ${C.divider}`, opacity: alert.is_read ? 0.55 : 1, cursor: 'pointer', transition: 'background 0.12s' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = C.rowHover}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                    <td style={{ padding: '12px 20px' }}>{!alert.is_read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} />}</td>
-                    <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: C.text }}>{alert.mpn}</td>
-                    <td style={{ padding: '12px 16px', maxWidth: 200 }}><p style={{ margin: 0, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={alert.summary}>{alert.summary}</p></td>
-                    <td style={{ padding: '12px 16px', maxWidth: 180 }}><p style={{ margin: 0, fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={alert.recommendation}>{alert.recommendation}</p></td>
+                    <td style={{ padding: '12px 20px' }}>{!alert.is_read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: `0 0 4px ${C.green}` }} />}</td>
+                    <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: C.text }}>{alert.mpn}</td>
+                    <td style={{ padding: '12px 16px', maxWidth: 220 }}><p style={{ margin: 0, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={alert.summary}>{alert.summary}</p></td>
+                    <td style={{ padding: '12px 16px', maxWidth: 200 }}><p style={{ margin: 0, fontSize: 12.5, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={alert.recommendation}>{alert.recommendation}</p></td>
                     <td style={{ padding: '12px 16px' }}><UrgencyBadge urgency={alert.urgency} /></td>
-                    <td style={{ padding: '12px 16px', fontSize: 12, color: C.mutedLight, whiteSpace: 'nowrap' }}>{relativeTime(alert.created_at)}</td>
+                    <td style={{ padding: '12px 16px', fontSize: 12, color: C.mutedLight, whiteSpace: 'nowrap', fontWeight: 600 }}>{relativeTime(alert.created_at)}</td>
                     <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
                       <button disabled={mutatingId === alert.id} onClick={() => markRead(alert.id, !alert.is_read)}
-                        style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', cursor: 'pointer', color: alert.is_read ? C.mutedLight : C.green }}>
+                        className="shadow-neu-raised-sm"
+                        style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.cardBorder}`, background: C.card, cursor: 'pointer', color: alert.is_read ? C.muted : C.green }}>
                         {mutatingId === alert.id ? <Loader2 size={14} className="animate-spin" /> : alert.is_read ? <BellOff size={14} /> : <Check size={14} />}
                       </button>
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                       <button disabled={mutatingId === alert.id} onClick={() => deleteAlert(alert.id)}
-                        style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', cursor: 'pointer', color: C.mutedLight }}
+                        className="shadow-neu-raised-sm"
+                        style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.cardBorder}`, background: C.card, cursor: 'pointer', color: C.muted }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = C.dangerSoft; (e.currentTarget as HTMLElement).style.color = C.danger }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = C.mutedLight }}>
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = C.card; (e.currentTarget as HTMLElement).style.color = C.muted }}>
                         {mutatingId === alert.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
                     </td>

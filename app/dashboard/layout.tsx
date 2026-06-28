@@ -13,18 +13,18 @@ const NAV_ITEMS = [
   { label: "Settings",  href: "/dashboard/settings", icon: "settings" },
 ];
 
-// ── Landing-page design tokens (light) ───────────────────────────────────────
+// ── Steel Gray + Sky Blue design tokens ───────────────────────────────────────────
 const C = {
-  bg:           "#dff0e8",
-  sidebar:      "#ffffff",
-  border:       "rgba(10,34,24,0.10)",
-  borderStrong: "rgba(10,34,24,0.18)",
-  green:        "#1b7a52",
-  greenSoft:    "#e8f7ef",
-  greenBorder:  "rgba(27,122,82,0.25)",
-  text:         "#071a10",
-  muted:        "#3e6b52",
-  mutedDim:     "#7aaa8e",
+  bg:           "#1c202a",
+  sidebar:      "#232833",
+  border:       "#2f3644",
+  borderStrong: "#3e4759",
+  green:        "#5ebcf8", // Sky blue
+  greenSoft:    "rgba(94, 188, 248, 0.10)",
+  greenBorder:  "rgba(94, 188, 248, 0.25)",
+  text:         "#f1f5f9",
+  muted:        "#94a3b8",
+  mutedDim:     "#64748b",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       className="min-h-screen flex overflow-x-hidden"
       style={{ fontFamily: "'DM Sans', sans-serif", backgroundColor: C.bg, color: C.text }}
     >
-      {/* ── Ambient blobs (matching landing page) ─────────────────────────── */}
+      {/* ── Ambient blobs ─────────────────────────── */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="ambient-glow-primary"  style={{ top: "-6%",   right: "-4%"  }} />
         <div className="ambient-glow-tertiary" style={{ bottom: "-12%", left: "-6%" }} />
@@ -60,34 +60,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         className="hidden md:flex flex-col w-60 min-h-screen fixed left-0 top-0 z-20"
         style={{
           background: C.sidebar,
-          borderRight: `1px solid ${C.border}`,
-          boxShadow: "2px 0 16px rgba(10,34,24,0.05)",
+          borderRight: `1.5px solid ${C.border}`,
+          boxShadow: "4px 0 20px rgba(0, 0, 0, 0.25)",
         }}
       >
         {/* Logo */}
         <div
           className="flex items-center gap-3 px-5 py-5"
-          style={{ borderBottom: `1px solid ${C.border}` }}
+          style={{ borderBottom: `1.5px solid ${C.border}` }}
         >
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}` }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center shadow-neu-raised-sm"
+            style={{ background: C.bg, border: `1px solid ${C.border}` }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L4 7v10l8 5 8-5V7z" stroke="#1b7a52" strokeWidth="1.8" strokeLinejoin="round" fill="rgba(27,122,82,0.15)" />
-              <circle cx="12" cy="12" r="2.5" fill="#1b7a52" />
+              <path d="M12 2L4 7v10l8 5 8-5V7z" stroke={C.green} strokeWidth="1.8" strokeLinejoin="round" fill="rgba(94, 188, 248, 0.15)" />
+              <circle cx="12" cy="12" r="2.5" fill={C.green} />
             </svg>
           </div>
           <div>
             <div className="text-sm font-bold tracking-tight" style={{ fontFamily: "'Syne', sans-serif", color: C.text }}>
               OmniProcure
             </div>
-            <div className="text-xs" style={{ color: C.mutedDim }}>AI Procurement</div>
+            <div className="text-xs" style={{ color: C.green }}>AI Sourcing</div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-col gap-0.5 px-3 py-4 flex-1">
+        <nav className="flex flex-col gap-1 px-3 py-5 flex-1">
           {NAV_ITEMS.map(item => {
             const active =
               pathname === item.href ||
@@ -101,9 +101,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   background: active ? C.greenSoft : "transparent",
                   borderLeft: active ? `2px solid ${C.green}` : "2px solid transparent",
                   color: active ? C.green : C.muted,
-                  fontWeight: active ? 600 : 400,
+                  fontWeight: active ? 700 : 500,
+                  boxShadow: active ? "inset 2px 2px 5px rgba(0, 0, 0, 0.15)" : "none",
                 }}
-                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(27,122,82,0.06)"; }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(94, 188, 248, 0.05)"; }}
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
               >
                 <span
@@ -119,8 +120,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className="text-sm">{item.label}</span>
                 {item.label === "Alerts" && pendingCount > 0 && (
                   <span
-                    className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded-full"
-                    style={{ background: "#fdecea", color: "#7a1a0a", border: "1px solid rgba(248,113,113,0.3)" }}
+                    className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(239, 68, 68, 0.12)", color: "#f87171", border: "1px solid rgba(239, 68, 68, 0.3)" }}
                   >
                     {pendingCount}
                   </span>
@@ -131,13 +132,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Status footer */}
-        <div className="px-5 py-4" style={{ borderTop: `1px solid ${C.border}` }}>
+        <div className="px-5 py-4" style={{ borderTop: `1.5px solid ${C.border}` }}>
           <div className="flex items-center gap-2">
             <span
-              className="w-2 h-2 rounded-full"
-              style={{ background: C.green, boxShadow: `0 0 5px rgba(27,122,82,0.4)` }}
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ background: C.green, boxShadow: `0 0 8px ${C.green}` }}
             />
-            <span className="text-xs" style={{ color: C.mutedDim }}>All systems operational</span>
+            <span className="text-xs font-semibold" style={{ color: C.muted }}>All systems active</span>
           </div>
         </div>
       </aside>
@@ -149,19 +150,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header
           className="sticky top-0 z-30 flex items-center justify-between px-6 py-3"
           style={{
-            background: "rgba(255,255,255,0.85)",
-            backdropFilter: "blur(12px)",
-            borderBottom: `1px solid ${C.border}`,
+            background: "rgba(35, 40, 51, 0.85)",
+            backdropFilter: "blur(16px)",
+            borderBottom: `1.5px solid ${C.border}`,
           }}
         >
           <div className="flex items-center gap-3">
-            <span className="md:hidden text-base font-bold" style={{ fontFamily: "'Syne', sans-serif", color: C.text }}>
+            <span className="md:hidden text-base font-extrabold" style={{ fontFamily: "'Syne', sans-serif", color: C.green }}>
               OmniProcure
             </span>
             <div className="hidden md:flex items-center gap-2 text-sm" style={{ color: C.muted }}>
-              <span style={{ color: C.mutedDim, fontSize: 12 }}>Dashboard</span>
+              <span style={{ color: C.mutedDim, fontSize: 12 }}>Workspace</span>
               <span style={{ color: C.mutedDim }}>›</span>
-              <span style={{ color: C.text, fontWeight: 500 }}>
+              <span style={{ color: C.green, fontWeight: 700 }}>
                 {NAV_ITEMS.find(i => i.href !== "/dashboard" && pathname.startsWith(i.href))?.label ?? "Overview"}
               </span>
             </div>
@@ -170,38 +171,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-3">
             {/* Search */}
             <div
-              className="hidden md:flex items-center gap-2 rounded-full px-4 py-2 w-52"
-              style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}` }}
+              className="hidden md:flex items-center gap-2 rounded-full px-4 py-2 w-56 shadow-neu-sunken-sm"
+              style={{ background: C.bg, border: `1px solid ${C.border}` }}
             >
-              <span className="material-symbols-outlined" style={{ color: C.mutedDim, fontSize: "17px" }}>search</span>
+              <span className="material-symbols-outlined" style={{ color: C.mutedDim, fontSize: "18px" }}>search</span>
               <input
-                className="bg-transparent text-sm outline-none w-full placeholder:text-[#7aaa8e]"
-                placeholder="Search…"
+                className="bg-transparent text-sm outline-none w-full placeholder:text-[#64748b]"
+                placeholder="Search telemetry…"
                 style={{ color: C.text }}
               />
             </div>
 
             {/* Notifications bell */}
             <button
-              className="relative w-9 h-9 rounded-full flex items-center justify-center transition-colors"
-              style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}` }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(27,122,82,0.18)"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = C.greenSoft}
+              className="relative w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 shadow-neu-raised-sm"
+              style={{ background: C.sidebar, border: `1.5px solid ${C.border}` }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = C.bg; (e.currentTarget as HTMLElement).style.color = C.green; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = C.sidebar; (e.currentTarget as HTMLElement).style.color = C.text; }}
             >
               <span className="material-symbols-outlined" style={{ color: C.muted, fontSize: "20px" }}>
                 notifications
               </span>
               {pendingCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "#ef4444" }} />
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full" style={{ background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} />
               )}
             </button>
 
             {/* Avatar */}
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}` }}
+              className="w-9 h-9 rounded-full flex items-center justify-center shadow-neu-raised-sm"
+              style={{ background: C.sidebar, border: `1.5px solid ${C.border}` }}
             >
-              <span className="material-symbols-outlined" style={{ color: C.muted, fontSize: "17px" }}>person</span>
+              <span className="material-symbols-outlined" style={{ color: C.green, fontSize: "18px" }}>person</span>
             </div>
           </div>
         </header>

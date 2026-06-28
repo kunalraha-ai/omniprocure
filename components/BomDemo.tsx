@@ -58,16 +58,16 @@ CRCW04021K00FKED,1K 0402 Resistor,6,Vishay`,
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: LineItemResult['stock_status'] }) {
   const map = {
-    'In Stock':     { bg: '#e8f7ef', color: '#0a5c35', dot: '#1b7a52' },
-    'Low Stock':    { bg: '#fef3e2', color: '#7a4f0a', dot: '#d97706' },
-    'Out of Stock': { bg: '#fdecea', color: '#7a1a0a', dot: '#ef4444' },
+    'In Stock':     { bg: 'rgba(16,185,129,0.12)', color: '#34d399', dot: '#10b981' },
+    'Low Stock':    { bg: 'rgba(245,158,11,0.12)', color: '#fbbf24', dot: '#f59e0b' },
+    'Out of Stock': { bg: 'rgba(239,68,68,0.12)',  color: '#f87171', dot: '#ef4444' },
   }
   const s = map[status]
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
       background: s.bg, color: s.color,
-      fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
+      fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
     }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot, flexShrink: 0 }} />
       {status}
@@ -83,7 +83,7 @@ function SkeletonRow() {
         <td key={i} style={{ padding: '14px 16px' }}>
           <div style={{
             height: 12, width: w, borderRadius: 6,
-            background: 'linear-gradient(90deg, rgba(10,34,24,0.07) 25%, rgba(10,34,24,0.13) 50%, rgba(10,34,24,0.07) 75%)',
+            background: 'linear-gradient(90deg, #2d3341 25%, #353c4d 50%, #2d3341 75%)',
             backgroundSize: '200% 100%',
             animation: 'shimmer 1.4s infinite',
           }} />
@@ -103,6 +103,20 @@ export default function BomDemo() {
   const [errorMsg, setErrorMsg]   = useState('')
   const [parsedCount, setParsedCount] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
+
+  const C = {
+    bg: "#1c202a",
+    card: "#232833",
+    cardElevated: "#282e3b",
+    border: "#2f3644",
+    sky: "#5ebcf8",
+    skyHover: "#7dd3fc",
+    text: "#f1f5f9",
+    muted: "#94a3b8",
+    mutedDim: "#64748b",
+    shadow: "6px 6px 12px #12141a, -6px -6px 12px #262c3a",
+    shadowInner: "inset 3px 3px 6px #12141a, inset -3px -3px 6px #262c3a",
+  };
 
   const reset = () => {
     abortRef.current?.abort()
@@ -215,16 +229,15 @@ export default function BomDemo() {
         }
         .demo-textarea:focus {
           outline: none;
-          border-color: rgba(10,34,24,0.35) !important;
-          box-shadow: 0 0 0 3px rgba(27,122,82,0.09);
+          border-color: ${C.sky} !important;
+          box-shadow: inset 2px 2px 4px #12141a, inset -2px -2px 4px #262c3a, 0 0 0 2px rgba(94, 188, 248, 0.2);
         }
         .demo-btn-primary {
           transition: background 0.18s, transform 0.12s, box-shadow 0.18s;
         }
         .demo-btn-primary:hover:not(:disabled) {
-          background: #0f2d1c !important;
+          background: ${C.skyHover} !important;
           transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,26,16,0.22);
         }
         .demo-btn-primary:active:not(:disabled) {
           transform: translateY(0);
@@ -234,43 +247,43 @@ export default function BomDemo() {
           cursor: pointer;
         }
         .demo-sample-btn:hover {
-          background: rgba(27,122,82,0.1) !important;
-          border-color: rgba(27,122,82,0.35) !important;
-          color: #0a5c35 !important;
+          background: rgba(94, 188, 248, 0.12) !important;
+          border-color: ${C.sky} !important;
+          color: ${C.skyHover} !important;
         }
         .demo-save-btn {
           transition: background 0.15s, transform 0.12s;
         }
         .demo-save-btn:hover {
-          background: #0f2d1c !important;
+          background: ${C.skyHover} !important;
           transform: translateY(-1px);
         }
         tr:hover td {
-          background: rgba(10,34,24,0.025);
+          background: rgba(94, 188, 248, 0.03) !important;
         }
       `}</style>
 
       {/* ── Input Panel ─────────────────────────────────────────────────────── */}
       <div style={{
-        background: '#fff',
-        border: '1px solid rgba(10,34,24,0.1)',
-        borderRadius: 20,
+        background: C.card,
+        border: `1.5px solid ${C.border}`,
+        borderRadius: 24,
         overflow: 'hidden',
-        boxShadow: '0 4px 28px rgba(10,34,24,0.07)',
+        boxShadow: C.shadow,
       }}>
         {/* Header */}
         <div style={{
-          padding: '16px 20px',
-          borderBottom: '1px solid rgba(10,34,24,0.07)',
+          padding: '20px 24px',
+          borderBottom: `1px solid ${C.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           flexWrap: 'wrap', gap: 10,
         }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#071a10', marginBottom: 2 }}>
-              Live BOM Analyzer
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.sky, marginBottom: 2 }}>
+              Live BOM Sourcing Simulator
             </div>
-            <div style={{ fontSize: 11.5, color: '#5a8a6e' }}>
-              Paste any BOM · CSV, text, or freeform — no account needed
+            <div style={{ fontSize: 12, color: C.muted }}>
+              Select a hardware profile or paste components to source instantly
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -280,9 +293,10 @@ export default function BomDemo() {
                 onClick={() => { reset(); setBom(s.value) }}
                 className="demo-sample-btn"
                 style={{
-                  fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 20,
-                  border: '1px solid rgba(10,34,24,0.16)', background: 'transparent',
-                  color: '#3e6b52',
+                  fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 20,
+                  border: `1.5px solid ${C.border}`, background: C.bg,
+                  color: C.muted,
+                  boxShadow: '2px 2px 4px #12141a, -2px -2px 4px #262c3a'
                 }}
               >
                 {s.label}
@@ -292,7 +306,7 @@ export default function BomDemo() {
         </div>
 
         {/* Textarea */}
-        <div style={{ padding: '16px 20px 12px' }}>
+        <div style={{ padding: '20px 24px 16px' }}>
           <textarea
             className="demo-textarea"
             value={bom}
@@ -300,49 +314,53 @@ export default function BomDemo() {
             rows={6}
             placeholder={`Paste your BOM here — any format works.\n\nExample:\nMPN,Description,Qty\nSTM32F103C8T6,ARM Cortex-M3,2\nAMS1117-3.3,LDO Regulator,4`}
             style={{
-              width: '100%', resize: 'vertical', padding: '12px 14px',
+              width: '100%', resize: 'vertical', padding: '14px 16px',
               fontSize: 12.5, fontFamily: 'monospace', lineHeight: 1.65,
-              background: '#f7faf8', border: '1px solid rgba(10,34,24,0.11)',
-              borderRadius: 12, color: '#071a10',
+              background: C.bg, border: `1.5px solid ${C.border}`,
+              borderRadius: 14, color: C.text,
+              boxShadow: C.shadowInner,
+              transition: 'all 0.2s ease',
             }}
           />
         </div>
 
         {/* CTA row */}
         <div style={{
-          padding: '0 20px 18px',
+          padding: '0 24px 20px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
           {/* Status */}
-          <div style={{ fontSize: 12, color: '#5a8a6e', minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, color: C.muted, minWidth: 0 }}>
             {isRunning ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.sky }}>
                 <span style={{
-                  width: 7, height: 7, borderRadius: '50%', background: '#1b7a52',
+                  width: 8, height: 8, borderRadius: '50%', background: C.sky,
                   animation: 'pulse-dot 1s infinite', display: 'inline-block', flexShrink: 0,
                 }} />
                 {statusMsg}
               </span>
             ) : phase === 'done' ? (
-              <span style={{ color: '#0a5c35', fontWeight: 600 }}>
-                ✓ {summary?.totalItems} parts analyzed
+              <span style={{ color: '#34d399', fontWeight: 700 }}>
+                ✓ Sourced {summary?.totalItems} parts successfully
               </span>
             ) : phase === 'error' ? (
-              <span style={{ color: '#c0392b' }}>⚠ {errorMsg}</span>
+              <span style={{ color: '#f87171', fontWeight: 600 }}>⚠ {errorMsg}</span>
             ) : (
-              <span>Pick a sample or paste your own BOM above</span>
+              <span>Select one of the sample BOM configs to run a live trace</span>
             )}
           </div>
 
           {/* Buttons */}
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
             {phase !== 'idle' && (
               <button
                 onClick={reset}
                 style={{
-                  fontSize: 12.5, fontWeight: 600, padding: '9px 16px', borderRadius: 50,
-                  border: '1.5px solid rgba(10,34,24,0.2)', background: 'transparent',
-                  color: '#3e6b52', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 50,
+                  border: `1.5px solid ${C.border}`, background: C.bg,
+                  color: C.muted, cursor: 'pointer',
+                  boxShadow: '2px 2px 4px #12141a, -2px -2px 4px #262c3a',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 Reset
@@ -353,27 +371,28 @@ export default function BomDemo() {
               disabled={isRunning || !bom.trim()}
               className="demo-btn-primary"
               style={{
-                fontSize: 13, fontWeight: 700, padding: '10px 22px', borderRadius: 50,
-                border: '2px solid #071a10',
-                background: isRunning ? '#3e6b52' : '#1b7a52',
-                color: '#fff', cursor: isRunning ? 'not-allowed' : 'pointer',
+                fontSize: 13, fontWeight: 700, padding: '10px 24px', borderRadius: 50,
+                border: 'none',
+                background: isRunning ? C.border : C.sky,
+                color: isRunning ? C.muted : C.bg,
+                cursor: isRunning ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 8,
-                opacity: !bom.trim() ? 0.5 : 1,
+                opacity: !bom.trim() ? 0.45 : 1,
               }}
             >
               {isRunning ? (
                 <>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.9s linear infinite' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ animation: 'spin 0.9s linear infinite' }}>
                     <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
-                  Analyzing…
+                  Trace running…
                 </>
               ) : (
                 <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                     <polygon points="5 3 19 12 5 21 5 3" />
                   </svg>
-                  Analyze BOM
+                  Search live
                 </>
               )}
             </button>
@@ -384,39 +403,39 @@ export default function BomDemo() {
       {/* ── Results Table ──────────────────────────────────────────────────── */}
       {(items.length > 0 || isRunning) && (
         <div style={{
-          marginTop: 14,
-          background: '#fff',
-          border: '1px solid rgba(10,34,24,0.1)',
-          borderRadius: 20,
+          marginTop: 20,
+          background: C.card,
+          border: `1.5px solid ${C.border}`,
+          borderRadius: 24,
           overflow: 'hidden',
-          boxShadow: '0 4px 28px rgba(10,34,24,0.07)',
+          boxShadow: C.shadow,
           animation: 'fade-up 0.3s ease',
         }}>
           {/* Table header bar */}
           <div style={{
-            padding: '13px 20px',
-            borderBottom: '1px solid rgba(10,34,24,0.07)',
+            padding: '16px 24px',
+            borderBottom: `1px solid ${C.border}`,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#071a10' }}>
-              Results
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: C.sky }}>
+              Telemetry Output
               {parsedCount > 0 && (
                 <span style={{
-                  marginLeft: 8, fontSize: 11, fontWeight: 600,
-                  background: '#e8f7ef', color: '#0a5c35',
-                  padding: '2px 8px', borderRadius: 12,
+                  marginLeft: 10, fontSize: 11, fontWeight: 800,
+                  background: 'rgba(94,188,248,0.12)', color: C.sky,
+                  padding: '2px 10px', borderRadius: 12,
                 }}>
-                  {items.length} / {parsedCount} parts
+                  {items.length} / {parsedCount} parts resolved
                 </span>
               )}
             </span>
             {isRunning && (
-              <span style={{ fontSize: 11.5, color: '#5a8a6e', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, color: C.sky, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
-                  width: 6, height: 6, borderRadius: '50%', background: '#1b7a52',
+                  width: 6, height: 6, borderRadius: '50%', background: C.sky,
                   animation: 'pulse-dot 1s infinite', display: 'inline-block',
                 }} />
-                Querying distributors…
+                Live querying…
               </span>
             )}
           </div>
@@ -424,13 +443,13 @@ export default function BomDemo() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
               <thead>
-                <tr style={{ background: '#f7faf8' }}>
+                <tr style={{ background: C.bg }}>
                   {['MPN', 'Description', 'Qty', 'Best Supplier', 'Unit Price', 'Lead Time', 'Stock'].map(h => (
                     <th key={h} style={{
-                      padding: '10px 16px', textAlign: 'left',
-                      fontSize: 10.5, fontWeight: 700, color: '#3e6b52',
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                      borderBottom: '1px solid rgba(10,34,24,0.07)', whiteSpace: 'nowrap',
+                      padding: '12px 16px', textAlign: 'left',
+                      fontSize: 10.5, fontWeight: 700, color: C.muted,
+                      letterSpacing: '0.08em', textTransform: 'uppercase',
+                      borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap',
                     }}>
                       {h}
                     </th>
@@ -442,36 +461,36 @@ export default function BomDemo() {
                   <tr
                     key={`${item.mpn}-${i}`}
                     className="demo-row-enter"
-                    style={{ borderBottom: '1px solid rgba(10,34,24,0.045)' }}
+                    style={{ borderBottom: `1px solid ${C.border}` }}
                   >
-                    <td style={{ padding: '13px 16px', fontFamily: 'monospace', fontWeight: 600, color: '#071a10', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 16px', fontFamily: 'monospace', fontWeight: 600, color: C.text, whiteSpace: 'nowrap' }}>
                       {item.mpn}
                     </td>
-                    <td style={{ padding: '13px 16px', color: '#3e6b52', maxWidth: 190 }}>
+                    <td style={{ padding: '14px 16px', color: C.muted, maxWidth: 220 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.part_name || '—'}
                       </div>
                     </td>
-                    <td style={{ padding: '13px 16px', color: '#071a10', fontWeight: 600, textAlign: 'center' }}>
+                    <td style={{ padding: '14px 16px', color: C.text, fontWeight: 700, textAlign: 'center' }}>
                       {item.qty}
                     </td>
-                    <td style={{ padding: '13px 16px', color: '#071a10', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 16px', color: C.text, whiteSpace: 'nowrap' }}>
                       {item.best_supplier ?? (
-                        <span style={{ color: '#bbb', fontStyle: 'italic' }}>
-                          {item.status === 'unfound' ? 'Not found' : 'Contact supplier'}
+                        <span style={{ color: C.mutedDim, fontStyle: 'italic' }}>
+                          {item.status === 'unfound' ? 'Not resolved' : 'Request RFQ'}
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '13px 16px', fontWeight: 700, color: '#1b7a52', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 16px', fontWeight: 800, color: C.sky, whiteSpace: 'nowrap' }}>
                       {item.price != null
-                        ? `$${item.price.toFixed(3)}`
-                        : <span style={{ color: '#bbb', fontStyle: 'italic', fontWeight: 400 }}>RFQ</span>
+                        ? `$${item.price.toFixed(4)}`
+                        : <span style={{ color: C.mutedDim, fontStyle: 'italic', fontWeight: 400 }}>RFQ</span>
                       }
                     </td>
-                    <td style={{ padding: '13px 16px', color: '#3e6b52', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '14px 16px', color: C.muted, whiteSpace: 'nowrap' }}>
                       {item.lead_time || '—'}
                     </td>
-                    <td style={{ padding: '13px 16px' }}>
+                    <td style={{ padding: '14px 16px' }}>
                       <StatusBadge status={item.stock_status} />
                     </td>
                   </tr>
@@ -479,7 +498,7 @@ export default function BomDemo() {
 
                 {/* Skeleton rows while still loading */}
                 {isRunning && parsedCount > items.length && (
-                  Array.from({ length: Math.min(parsedCount - items.length, 4) }).map((_, i) => (
+                  Array.from({ length: Math.min(parsedCount - items.length, 3) }).map((_, i) => (
                     <SkeletonRow key={`sk-${i}`} />
                   ))
                 )}
@@ -490,38 +509,39 @@ export default function BomDemo() {
           {/* ── Summary + CTA bar ──────────────────────────────────────────── */}
           {summary && (
             <div style={{
-              padding: '14px 20px',
-              borderTop: '1px solid rgba(10,34,24,0.07)',
-              background: '#f7faf8',
+              padding: '18px 24px',
+              borderTop: `1px solid ${C.border}`,
+              background: C.bg,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               flexWrap: 'wrap', gap: 14,
             }}>
               {/* Pill stats */}
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                 {[
-                  { label: 'Sourced',   value: summary.sourced,  bg: '#e8f7ef', color: '#0a5c35' },
-                  { label: 'Partial',   value: summary.partial,  bg: '#fef3e2', color: '#7a4f0a' },
-                  { label: 'Not Found', value: summary.unfound,  bg: '#fdecea', color: '#7a1a0a' },
+                  { label: 'Sourced',   value: summary.sourced,  bg: 'rgba(16,185,129,0.12)', color: '#34d399' },
+                  { label: 'Partial',   value: summary.partial,  bg: 'rgba(245,158,11,0.12)', color: '#fbbf24' },
+                  { label: 'Not Found', value: summary.unfound,  bg: 'rgba(239,68,68,0.12)',  color: '#f87171' },
                 ].map(s => (
-                  <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{
-                      fontSize: 12, fontWeight: 700, padding: '2px 9px', borderRadius: 12,
+                      fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 12,
                       background: s.bg, color: s.color,
+                      boxShadow: '1px 1px 2px rgba(0,0,0,0.15)'
                     }}>
                       {s.value}
                     </span>
-                    <span style={{ fontSize: 11.5, color: '#5a8a6e' }}>{s.label}</span>
+                    <span style={{ fontSize: 12, color: C.muted }}>{s.label}</span>
                   </div>
                 ))}
               </div>
 
               {/* Cost + CTA */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 10.5, color: '#5a8a6e', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 1 }}>
-                    Est. BOM Cost
+                  <div style={{ fontSize: 10.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+                    Est. Total Cost
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: '#071a10', letterSpacing: '-0.5px', lineHeight: 1 }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: C.sky, letterSpacing: '-0.5px', lineHeight: 1 }}>
                     ${summary.estimatedCost.toFixed(2)}
                   </div>
                 </div>
@@ -529,14 +549,15 @@ export default function BomDemo() {
                   href="/auth/login"
                   className="demo-save-btn"
                   style={{
-                    display: 'inline-block', fontSize: 12.5, fontWeight: 700,
-                    padding: '10px 20px', borderRadius: 50,
-                    background: '#071a10', color: '#dff0e8',
+                    display: 'inline-block', fontSize: 13, fontWeight: 700,
+                    padding: '10px 24px', borderRadius: 50,
+                    background: C.sky, color: C.bg,
                     textDecoration: 'none', whiteSpace: 'nowrap',
-                    border: '2px solid #071a10',
+                    boxShadow: '3px 3px 6px #12141a',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  Save & Monitor →
+                  Save &amp; Monitor →
                 </a>
               </div>
             </div>

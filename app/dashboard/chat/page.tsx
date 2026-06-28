@@ -19,8 +19,8 @@ interface Session {
 function renderMarkdown(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`(.+?)`/g, '<code style="background:rgba(125,211,252,0.1);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:0.85em;color:#7dd3fc">$1</code>')
-    .replace(/^• (.+)$/gm, '<div style="display:flex;gap:8px;margin:2px 0"><span style="color:#7dd3fc;margin-top:2px">•</span><span>$1</span></div>')
+    .replace(/`(.+?)`/g, '<code style="background:rgba(94,188,248,0.12);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:0.85em;color:#5ebcf8">$1</code>')
+    .replace(/^• (.+)$/gm, '<div style="display:flex;gap:8px;margin:2px 0"><span style="color:#5ebcf8;margin-top:2px">•</span><span>$1</span></div>')
     .replace(/\n/g, "<br/>");
 }
 
@@ -34,7 +34,6 @@ const SUGGESTIONS = [
   { icon: "bar_chart", text: "What components are being monitored?" },
 ];
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -47,6 +46,20 @@ export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const C = {
+    bg: "#1c202a",
+    sidebar: "#232833",
+    card: "#232833",
+    border: "#2f3644",
+    sky: "#5ebcf8",
+    skySoft: "rgba(94, 188, 248, 0.12)",
+    text: "#f1f5f9",
+    muted: "#94a3b8",
+    mutedDim: "#64748b",
+    shadow: "6px 6px 12px #12141a, -6px -6px 12px #262c3a",
+    shadowInner: "inset 3px 3px 6px #12141a, inset -3px -3px 6px #262c3a",
+  };
 
   // Load sessions list
   useEffect(() => {
@@ -170,7 +183,7 @@ export default function ChatPage() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex h-[calc(100vh-80px)] gap-0 -m-6 md:-m-8 overflow-hidden">
+    <div className="flex h-[calc(100vh-80px)] gap-0 -m-6 md:-m-8 overflow-hidden" style={{ background: C.bg }}>
 
       {/* ── Sessions Sidebar ─────────────────────────────────────────────── */}
       <aside
@@ -178,40 +191,40 @@ export default function ChatPage() {
         style={{
           width: sidebarOpen ? "240px" : "0px",
           minWidth: sidebarOpen ? "240px" : "0px",
-          borderRight: "1px solid rgba(125,211,252,0.08)",
-          background: "rgba(10,14,26,0.6)",
+          borderRight: `1.5px solid ${C.border}`,
+          background: C.sidebar,
         }}
       >
-        <div className="flex items-center justify-between px-4 py-4 flex-shrink-0" style={{ borderBottom: "1px solid rgba(125,211,252,0.08)" }}>
-          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#7dd3fc" }}>History</span>
+        <div className="flex items-center justify-between px-4 py-4 flex-shrink-0" style={{ borderBottom: `1.5px solid ${C.border}` }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: C.sky }}>History</span>
           <button
             onClick={newSession}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={{ background: "rgba(125,211,252,0.1)", color: "#7dd3fc", border: "1px solid rgba(125,211,252,0.2)" }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-neu-raised-sm"
+            style={{ background: C.bg, color: C.sky, border: `1px solid ${C.border}` }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>add</span>
             New
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-2 px-2">
+        <div className="flex-1 overflow-y-auto py-3 px-2">
           {sessions.length === 0 && (
-            <p className="text-xs text-center py-8 px-4" style={{ color: "#4a6070" }}>No conversations yet</p>
+            <p className="text-xs text-center py-8 px-4" style={{ color: C.mutedDim }}>No conversations yet</p>
           )}
           {sessions.map(s => (
             <button
               key={s.session_id}
               onClick={() => loadSession(s.session_id)}
-              className="w-full text-left px-3 py-2.5 rounded-lg mb-1 transition-all"
+              className="w-full text-left px-3 py-2.5 rounded-xl mb-1.5 transition-all"
               style={{
-                background: sessionId === s.session_id ? "rgba(125,211,252,0.1)" : "transparent",
-                border: sessionId === s.session_id ? "1px solid rgba(125,211,252,0.2)" : "1px solid transparent",
+                background: sessionId === s.session_id ? C.skySoft : "transparent",
+                border: sessionId === s.session_id ? `1px solid ${C.sky}` : "1px solid transparent",
               }}
             >
-              <p className="text-xs font-medium truncate" style={{ color: sessionId === s.session_id ? "#7dd3fc" : "#a0b4c4" }}>
+              <p className="text-xs font-bold truncate" style={{ color: sessionId === s.session_id ? C.sky : C.text }}>
                 {s.content.slice(0, 40)}...
               </p>
-              <p className="text-xs mt-0.5" style={{ color: "#4a6070" }}>
+              <p className="text-[10px] mt-1 font-semibold" style={{ color: sessionId === s.session_id ? C.sky : C.mutedDim }}>
                 {new Date(s.created_at).toLocaleDateString()}
               </p>
             </button>
@@ -229,37 +242,37 @@ export default function ChatPage() {
         {/* Drag overlay */}
         {dragOver && (
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4"
-            style={{ background: "rgba(10,14,26,0.85)", border: "2px dashed rgba(125,211,252,0.5)" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: "48px", color: "#7dd3fc" }}>upload_file</span>
-            <p className="text-lg font-semibold" style={{ color: "#7dd3fc" }}>Drop your BOM CSV here</p>
+            style={{ background: "rgba(28,32,42,0.9)", border: `2.5px dashed ${C.sky}` }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "48px", color: C.sky }}>upload_file</span>
+            <p className="text-lg font-bold" style={{ color: C.sky }}>Drop your BOM CSV here to parse</p>
           </div>
         )}
 
         {/* Chat header */}
         <div
-          className="flex items-center gap-3 px-6 py-3 flex-shrink-0"
-          style={{ borderBottom: "1px solid rgba(125,211,252,0.08)", background: "rgba(10,14,26,0.4)" }}
+          className="flex items-center gap-3 px-6 py-3.5 flex-shrink-0"
+          style={{ borderBottom: `1.5px solid ${C.border}`, background: C.sidebar }}
         >
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ background: "rgba(125,211,252,0.05)", color: "#a0b4c4" }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-neu-raised-sm"
+            style={{ background: C.bg, color: C.muted, border: `1px solid ${C.border}` }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>menu</span>
           </button>
 
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: "rgba(125,211,252,0.12)", border: "1px solid rgba(125,211,252,0.25)" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "#7dd3fc", fontVariationSettings: "'FILL' 1" }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-neu-raised-sm"
+              style={{ background: C.bg, border: `1px solid ${C.border}` }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: C.sky, fontVariationSettings: "'FILL' 1" }}>
                 smart_toy
               </span>
             </div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: "#e0e8f0" }}>OmniProcure AI</p>
+              <p className="text-sm font-bold" style={{ color: C.text }}>OmniProcure AI Assistant</p>
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#22c55e" }} />
-                <span className="text-xs" style={{ color: "#4a6070" }}>Live — OEM API + BOM upload ready</span>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#34d399" }} />
+                <span className="text-xs font-semibold" style={{ color: C.mutedDim }}>Telemetry API channels active</span>
               </div>
             </div>
           </div>
@@ -268,8 +281,8 @@ export default function ChatPage() {
             {sessionId && (
               <button
                 onClick={newSession}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
-                style={{ background: "rgba(125,211,252,0.08)", color: "#7dd3fc", border: "1px solid rgba(125,211,252,0.15)" }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-neu-raised-sm"
+                style={{ background: C.bg, color: C.sky, border: `1px solid ${C.border}` }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>add</span>
                 New Chat
@@ -285,33 +298,34 @@ export default function ChatPage() {
           {isEmpty && (
             <div className="flex flex-col items-center justify-center h-full gap-8 max-w-2xl mx-auto">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                  style={{ background: "rgba(125,211,252,0.1)", border: "1px solid rgba(125,211,252,0.2)" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: "32px", color: "#7dd3fc", fontVariationSettings: "'FILL' 1" }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-card-raised"
+                  style={{ background: C.card, border: `1.5px solid ${C.border}` }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "32px", color: C.sky, fontVariationSettings: "'FILL' 1" }}>
                     smart_toy
                   </span>
                 </div>
-                <h2 className="text-xl font-semibold mb-2" style={{ color: "#e0e8f0" }}>OmniProcure AI</h2>
-                <p className="text-sm" style={{ color: "#a0b4c4" }}>
-                  Ask about component stock, pricing, alerts, or drop a BOM CSV to source parts instantly.
+                <h2 className="text-xl font-bold mb-2" style={{ color: C.text }}>Sourcing AI Agent</h2>
+                <p className="text-sm text-on-surface-variant leading-relaxed">
+                  Provide a component part number to analyze distributor inventories, or drag and drop a BOM file here to run a batch import.
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 w-full">
+              {/* Suggestions bento grid */}
+              <div className="grid grid-cols-2 gap-3 w-full">
                 {SUGGESTIONS.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => s.icon === "upload_file" ? fileInputRef.current?.click() : send(s.text)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all"
-                    style={{ background: "rgba(15,21,36,0.6)", border: "1px solid rgba(125,211,252,0.1)" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(125,211,252,0.3)")}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(125,211,252,0.1)")}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all shadow-neu-raised-sm"
+                    style={{ background: C.card, border: `1px solid ${C.border}` }}
+                    onMouseEnter={e => { (e.currentTarget.style.borderColor = C.sky); }}
+                    onMouseLeave={e => { (e.currentTarget.style.borderColor = C.border); }}
                   >
                     <span className="material-symbols-outlined flex-shrink-0"
-                      style={{ fontSize: "18px", color: "#7dd3fc", fontVariationSettings: "'FILL' 1" }}>
+                      style={{ fontSize: "18px", color: C.sky, fontVariationSettings: "'FILL' 1" }}>
                       {s.icon}
                     </span>
-                    <span className="text-xs" style={{ color: "#a0b4c4" }}>{s.text}</span>
+                    <span className="text-xs font-bold" style={{ color: C.muted }}>{s.text}</span>
                   </button>
                 ))}
               </div>
@@ -322,25 +336,25 @@ export default function ChatPage() {
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               {msg.role === "assistant" && (
-                <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5"
-                  style={{ background: "rgba(125,211,252,0.12)", border: "1px solid rgba(125,211,252,0.2)" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#7dd3fc", fontVariationSettings: "'FILL' 1" }}>
+                <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5 shadow-neu-raised-sm"
+                  style={{ background: C.card, border: `1px solid ${C.border}` }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "15px", color: C.sky, fontVariationSettings: "'FILL' 1" }}>
                     smart_toy
                   </span>
                 </div>
               )}
               <div
-                className="max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed"
+                className="max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-neu-raised-sm"
                 style={msg.role === "user"
-                  ? { background: "rgba(125,211,252,0.12)", border: "1px solid rgba(125,211,252,0.2)", color: "#e0e8f0", borderRadius: "18px 18px 4px 18px" }
-                  : { background: "rgba(15,21,36,0.7)", border: "1px solid rgba(125,211,252,0.08)", color: "#c8d8e4", borderRadius: "18px 18px 18px 4px" }
+                  ? { background: C.skySoft, border: `1px solid ${C.sky}`, color: C.text, borderRadius: "18px 18px 4px 18px" }
+                  : { background: C.card, border: `1px solid ${C.border}`, color: C.text, borderRadius: "18px 18px 18px 4px" }
                 }
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
               />
               {msg.role === "user" && (
-                <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5"
-                  style={{ background: "rgba(26,36,56,0.8)", border: "1px solid rgba(125,211,252,0.15)" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#a0b4c4" }}>person</span>
+                <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5 shadow-neu-raised-sm"
+                  style={{ background: C.card, border: `1px solid ${C.border}` }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "15px", color: C.muted }}>person</span>
                 </div>
               )}
             </div>
@@ -349,18 +363,18 @@ export default function ChatPage() {
           {/* Loading indicator */}
           {(loading || uploadingFile) && (
             <div className="flex gap-3 justify-start">
-              <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center"
-                style={{ background: "rgba(125,211,252,0.12)", border: "1px solid rgba(125,211,252,0.2)" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#7dd3fc", fontVariationSettings: "'FILL' 1" }}>
+              <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center shadow-neu-raised-sm"
+                style={{ background: C.card, border: `1px solid ${C.border}` }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "15px", color: C.sky, fontVariationSettings: "'FILL' 1" }}>
                   smart_toy
                 </span>
               </div>
-              <div className="px-4 py-3 rounded-2xl flex items-center gap-2"
-                style={{ background: "rgba(15,21,36,0.7)", border: "1px solid rgba(125,211,252,0.08)", borderRadius: "18px 18px 18px 4px" }}>
-                {uploadingFile && <span className="text-xs mr-1" style={{ color: "#7dd3fc" }}>Sourcing BOM...</span>}
+              <div className="px-4 py-3 rounded-2xl flex items-center gap-2 shadow-neu-raised-sm"
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: "18px 18px 18px 4px" }}>
+                {uploadingFile && <span className="text-xs mr-1 font-semibold" style={{ color: C.sky }}>Processing BOM file...</span>}
                 {[0, 1, 2].map(j => (
                   <span key={j} className="w-1.5 h-1.5 rounded-full"
-                    style={{ background: "#7dd3fc", animation: "bounce 1.2s infinite", animationDelay: `${j * 0.2}s`, display: "inline-block" }} />
+                    style={{ background: C.sky, animation: "bounce 1.2s infinite", animationDelay: `${j * 0.2}s`, display: "inline-block" }} />
                 ))}
                 <style>{`@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.4} 40%{transform:translateY(-6px);opacity:1} }`}</style>
               </div>
@@ -372,23 +386,23 @@ export default function ChatPage() {
 
         {/* Input area */}
         <div className="flex-shrink-0 px-6 py-4"
-          style={{ borderTop: "1px solid rgba(125,211,252,0.08)", background: "rgba(10,14,26,0.4)" }}>
-          <div className="flex items-end gap-3 rounded-2xl px-4 py-3"
-            style={{ background: "rgba(15,21,36,0.8)", border: "1px solid rgba(125,211,252,0.15)" }}>
+          style={{ borderTop: `1.5px solid ${C.border}`, background: C.sidebar }}>
+          <div className="flex items-end gap-3 rounded-2xl px-4 py-3 shadow-neu-sunken"
+            style={{ background: C.bg, border: `1px solid ${C.border}` }}>
 
             {/* File upload button */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={loading}
               title="Upload BOM CSV"
-              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all mb-0.5"
+              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all mb-0.5 shadow-neu-raised-sm"
               style={{
-                background: "rgba(125,211,252,0.08)",
-                border: "1px solid rgba(125,211,252,0.15)",
-                color: "#7dd3fc",
+                background: C.card,
+                border: `1px solid ${C.border}`,
+                color: C.sky,
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(125,211,252,0.18)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "rgba(125,211,252,0.08)")}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = C.border; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = C.card; }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>upload_file</span>
             </button>
@@ -412,26 +426,26 @@ export default function ChatPage() {
               onKeyDown={handleKey}
               placeholder="Ask about stock, alerts, or upload a BOM CSV..."
               className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed"
-              style={{ color: "#e0e8f0", maxHeight: "120px", overflowY: "auto" }}
+              style={{ color: C.text, maxHeight: "120px", overflowY: "auto" }}
             />
             <button
               onClick={() => send()}
               disabled={!input.trim() || loading}
-              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-neu-raised-sm"
               style={{
-                background: input.trim() && !loading ? "rgba(125,211,252,0.2)" : "rgba(125,211,252,0.05)",
-                border: `1px solid ${input.trim() && !loading ? "rgba(125,211,252,0.4)" : "rgba(125,211,252,0.1)"}`,
+                background: input.trim() && !loading ? C.sky : C.card,
+                border: "none",
                 cursor: input.trim() && !loading ? "pointer" : "not-allowed",
               }}
             >
               <span className="material-symbols-outlined"
-                style={{ fontSize: "18px", color: input.trim() && !loading ? "#7dd3fc" : "#4a6070", fontVariationSettings: "'FILL' 1" }}>
+                style={{ fontSize: "18px", color: input.trim() && !loading ? C.bg : C.mutedDim, fontVariationSettings: "'FILL' 1" }}>
                 send
               </span>
             </button>
           </div>
-          <p className="text-xs text-center mt-2" style={{ color: "#4a6070" }}>
-            Enter to send · Shift+Enter for new line · Drop a CSV to upload BOM
+          <p className="text-xs text-center mt-2 font-semibold" style={{ color: C.mutedDim }}>
+            Enter to send · Shift+Enter for new line · Drag &amp; drop BOM files directly into the window
           </p>
         </div>
       </div>

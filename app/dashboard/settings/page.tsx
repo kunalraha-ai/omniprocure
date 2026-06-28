@@ -32,17 +32,46 @@ interface UserSettings {
 type FetchState = 'idle' | 'loading' | 'success' | 'error'
 interface ToastMsg { type: 'success' | 'error'; text: string }
 
+// ─── Steel Gray + Sky Blue tokens ───────────────────────────────────────────
+const C = {
+  bg:          '#1c202a',
+  sidebar:     '#232833',
+  green:       '#5ebcf8', // Sky Blue
+  greenDark:   '#7dd3fc',
+  greenSoft:   'rgba(94, 188, 248, 0.10)',
+  greenBorder: 'rgba(94, 188, 248, 0.25)',
+  text:        '#f1f5f9',
+  muted:       '#94a3b8',
+  mutedLight:  '#64748b',
+  card:        '#232833',
+  cardBorder:  '#2f3644',
+  cardShadow:  '6px 6px 12px #12141a, -6px -6px 12px #2d3443',
+  shadowInner: 'inset 3px 3px 6px #12141a, inset -3px -3px 6px #2d3443',
+  divider:     '#2f3644',
+  rowHover:    'rgba(94, 188, 248, 0.03)',
+  warn:        '#fbbf24',
+  warnSoft:    'rgba(245, 158, 11, 0.12)',
+  warnBorder:  'rgba(245, 158, 11, 0.3)',
+  danger:      '#f87171',
+  dangerSoft:  'rgba(239, 68, 68, 0.12)',
+  dangerBorder:'rgba(239, 68, 68, 0.3)',
+}
+
 function Toast({ toast, onDismiss }: { toast: ToastMsg; onDismiss: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDismiss, 4000)
     return () => clearTimeout(t)
   }, [onDismiss])
   return (
-    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium
-      ${toast.type === 'success' ? 'glass-panel border-green-500/30 text-on-surface' : 'glass-panel border-red-500/30 text-on-surface'}`}>
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-lg border text-sm font-bold shadow-card-raised"
+      style={{
+        background: C.card,
+        borderColor: toast.type === 'success' ? C.greenBorder : C.dangerBorder,
+        color: C.text
+      }}>
       {toast.type === 'success'
-        ? <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
-        : <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />}
+        ? <CheckCircle className="w-4 h-4 shrink-0" style={{ color: '#34d399' }} />
+        : <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#f87171' }} />}
       {toast.text}
     </div>
   )
@@ -50,12 +79,12 @@ function Toast({ toast, onDismiss }: { toast: ToastMsg; onDismiss: () => void })
 
 function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <div className="glass-panel rounded-3xl border-slate-700/60 overflow-hidden">
-      <div className="flex items-center gap-2 px-6 py-5 border-b border-slate-700/70">
-        <Icon className="w-4 h-4 text-on-surface-variant" />
-        <h2 className="text-base font-semibold text-on-surface">{title}</h2>
+    <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 24, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 24px', borderBottom: `1.5px solid ${C.divider}` }}>
+        <Icon className="w-4.5 h-4.5" style={{ color: C.green }} />
+        <h2 style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: 0 }}>{title}</h2>
       </div>
-      <div className="p-6 space-y-5">{children}</div>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>{children}</div>
     </div>
   )
 }
@@ -93,7 +122,6 @@ export default function DashboardSettingsPage() {
     }
 
     if (!data) {
-      // First login — auto-create row for this user
       const newUser: UserSettings = {
         id: user.id,
         email: user.email ?? '',
@@ -198,19 +226,20 @@ export default function DashboardSettingsPage() {
 
   if (fetchState === 'loading') {
     return (
-      <div className="flex items-center justify-center gap-3 py-24 text-on-surface-variant">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">Loading settings…</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '96px 0', color: C.muted }}>
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: C.green }} />
+        <span className="text-sm font-bold">Retrieving profile settings…</span>
       </div>
     )
   }
 
   if (fetchState === 'error') {
     return (
-      <div className="flex flex-col items-center gap-3 py-24 text-center">
-        <AlertTriangle className="w-8 h-8 text-red-400" />
-        <p className="font-medium text-on-surface">Failed to load settings</p>
-        <Button variant="outline" size="sm" onClick={fetchSettings} className="gap-2 mt-1">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '96px 0', textAlign: 'center' }}>
+        <AlertTriangle className="w-8 h-8" style={{ color: C.danger }} />
+        <p className="font-bold text-lg" style={{ color: C.text }}>Settings unavailable</p>
+        <Button variant="outline" size="sm" onClick={fetchSettings} className="gap-2 mt-1 shadow-neu-raised-sm"
+          style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, color: C.green }}>
           <RefreshCw className="w-4 h-4" /> Try again
         </Button>
       </div>
@@ -220,38 +249,39 @@ export default function DashboardSettingsPage() {
   if (!settings) return null
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
 
-      <div className="glass-panel-elevated rounded-[2rem] border-slate-700/70 p-8">
-        <h1 className="text-3xl font-bold text-on-surface mb-1">Settings</h1>
-        <p className="text-on-surface-variant">Manage your account, notifications, and integrations.</p>
+      {/* Header card */}
+      <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 24, padding: '24px 28px' }}>
+        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 30, fontWeight: 800, color: C.text, letterSpacing: '-1px', margin: 0 }}>System Settings</h1>
+        <p style={{ marginTop: 6, fontSize: 14.5, color: C.muted, margin: 0 }}>Manage credentials, alerts, Slack webhooks, and device triggers.</p>
       </div>
 
-      <Section icon={User} title="Account">
-        <div className="space-y-1.5">
-          <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Email</Label>
-          <p className="text-on-surface font-medium">{settings.email}</p>
+      <Section icon={User} title="Account Details">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Label style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>Account Email</Label>
+          <p style={{ fontSize: 14.5, fontWeight: 700, color: C.text, margin: 0 }}>{settings.email}</p>
         </div>
 
-        <Separator className="border-slate-700/70" />
+        <Separator style={{ background: C.divider }} />
 
-        <div className="flex items-center justify-between gap-4">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Account Tier</Label>
-            <div className="mt-2">
+            <Label style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>Subscription Tier</Label>
+            <div style={{ marginTop: 8 }}>
               {isPaid ? (
-                <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300">
+                <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 50, fontSize: 11.5, fontWeight: 700, background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }}>
                   Founding Member — $99/mo
                 </span>
               ) : (
-                <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-slate-700/50 text-on-surface-variant">
+                <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 50, fontSize: 11.5, fontWeight: 700, background: C.greenSoft, color: C.green, border: `1px solid ${C.greenBorder}` }}>
                   Free Trial
                 </span>
               )}
             </div>
           </div>
           {!isPaid && (
-            <Button asChild size="sm" className="gap-2 shrink-0 glass-button-primary rounded-2xl">
+            <Button asChild size="sm" className="gap-2 shrink-0 rounded-2xl shadow-neu-raised-sm" style={{ background: C.green, color: C.bg }}>
               <a href={process.env.NEXT_PUBLIC_STRIPE_LINK ?? '#'} target="_blank" rel="noopener noreferrer">
                 Upgrade <ExternalLink className="w-3.5 h-3.5" />
               </a>
@@ -259,32 +289,35 @@ export default function DashboardSettingsPage() {
           )}
         </div>
 
-        <Separator className="border-slate-700/70" />
+        <Separator style={{ background: C.divider }} />
 
-        <div className="space-y-2">
-          <Label className="text-xs uppercase tracking-[0.24em] text-on-surface-variant">Monitoring Frequency</Label>
-          <div className="flex flex-col gap-2 mt-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Label style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>Monitoring Frequency</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
             {[
-              { value: '24h', label: '24 hours', sublabel: 'Current plan', available: true },
-              { value: '6h', label: '6 hours', sublabel: 'Founding Member only', available: isPaid },
+              { value: '24h', label: '24 hours', sublabel: 'Current plan setting', available: true },
+              { value: '6h', label: '6 hours', sublabel: 'Founding Member tier only', available: isPaid },
             ].map(opt => (
               <button
                 key={opt.value}
                 disabled={!opt.available}
                 onClick={() => opt.available && updateField('monitoring_frequency', opt.value)}
-                className={`flex items-center justify-between px-4 py-3 rounded-2xl border text-left transition-colors text-sm
-                  ${settings.monitoring_frequency === opt.value
-                    ? 'border-primary/60 bg-primary-soft text-on-surface'
-                    : 'border-slate-700/60 hover:border-slate-600/80 text-on-surface-variant'}
-                  ${!opt.available ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                className="shadow-neu-raised-sm"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 18px', borderRadius: 16, border: `1px solid ${settings.monitoring_frequency === opt.value ? C.green : C.cardBorder}`,
+                  background: settings.monitoring_frequency === opt.value ? C.greenSoft : C.card,
+                  textAlign: 'left', cursor: opt.available ? 'pointer' : 'not-allowed', opacity: opt.available ? 1 : 0.5,
+                  transition: 'all 0.15s'
+                }}
               >
                 <div>
-                  <span className="font-medium text-on-surface">{opt.label}</span>
-                  <span className="ml-2 text-xs text-on-surface-variant">{opt.sublabel}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>{opt.label}</span>
+                  <span style={{ marginLeft: 8, fontSize: 11.5, color: C.muted }}>{opt.sublabel}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {!opt.available && <Lock className="w-3.5 h-3.5 text-on-surface-variant" />}
-                  {settings.monitoring_frequency === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {!opt.available && <Lock className="w-3.5 h-3.5" style={{ color: C.muted }} />}
+                  {settings.monitoring_frequency === opt.value && <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.green, boxShadow: `0 0 6px ${C.green}` }} />}
                 </div>
               </button>
             ))}
@@ -292,24 +325,26 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      <Section icon={Bell} title="Notifications">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
+      <Section icon={Bell} title="System Notifications">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <Label className="text-sm font-medium text-on-surface">Slack Webhook</Label>
-              <p className="text-xs text-on-surface-variant mt-0.5">Post alerts to a Slack channel</p>
+              <Label style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Slack Webhook</Label>
+              <p style={{ fontSize: 12, color: C.muted, margin: '2px 0 0' }}>Post warning telemetry to Slack channels</p>
             </div>
             <Switch checked={slackEnabled} onCheckedChange={setSlackEnabled} />
           </div>
           {slackEnabled && (
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <Input
                 placeholder="https://hooks.slack.com/services/…"
                 value={settings.slack_webhook ?? ''}
                 onChange={e => updateField('slack_webhook', e.target.value)}
-                className="glass-input rounded-2xl font-mono text-sm text-on-surface"
+                className="font-mono text-xs shadow-neu-sunken-sm"
+                style={{ background: C.bg, border: `1px solid ${C.cardBorder}`, color: C.text, borderRadius: 12 }}
               />
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 rounded-2xl border-slate-700/60"
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 shadow-neu-raised-sm"
+                style={{ background: C.card, border: `1px solid ${C.cardBorder}`, color: C.green, borderRadius: 12 }}
                 disabled={!settings.slack_webhook || testingSlack} onClick={testSlack}>
                 {testingSlack ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 Test
@@ -318,26 +353,28 @@ export default function DashboardSettingsPage() {
           )}
         </div>
 
-        <Separator className="border-slate-700/70" />
+        <Separator style={{ background: C.divider }} />
 
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <Label className="text-sm font-medium text-on-surface">Alert Email</Label>
-              <p className="text-xs text-on-surface-variant mt-0.5">Receive alerts by email</p>
+              <Label style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Alert Email</Label>
+              <p style={{ fontSize: 12, color: C.muted, margin: '2px 0 0' }}>Receive high priority alerts via email</p>
             </div>
             <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} />
           </div>
           {emailEnabled && (
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <Input
                 type="email"
                 placeholder="alerts@yourcompany.com"
                 value={settings.alert_email ?? ''}
                 onChange={e => updateField('alert_email', e.target.value)}
-                className="glass-input rounded-2xl text-on-surface"
+                className="shadow-neu-sunken-sm"
+                style={{ background: C.bg, border: `1px solid ${C.cardBorder}`, color: C.text, borderRadius: 12 }}
               />
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 rounded-2xl border-slate-700/60"
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 shadow-neu-raised-sm"
+                style={{ background: C.card, border: `1px solid ${C.cardBorder}`, color: C.green, borderRadius: 12 }}
                 disabled={!settings.alert_email || testingEmail} onClick={testEmail}>
                 {testingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 Test
@@ -347,62 +384,65 @@ export default function DashboardSettingsPage() {
         </div>
       </Section>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-32 glass-button-primary rounded-2xl">
+      {/* Save Trigger Button */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={handleSave} disabled={saving} className="shadow-neu-raised-sm"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minWidth: 140, padding: '11px 24px', borderRadius: 50, border: 'none', background: C.green, color: C.bg, fontWeight: 700, cursor: 'pointer' }}>
           {saving
             ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
-            : <><Save className="w-4 h-4" /> Save Settings</>}
-        </Button>
+            : <><Save className="w-4 h-4" /> Save Config</>}
+        </button>
       </div>
 
-      <Section icon={Shield} title="Danger Zone">
-        <p className="text-sm text-on-surface-variant -mt-1">These actions are permanent and cannot be undone.</p>
-        <div className="space-y-3">
+      <Section icon={Shield} title="Danger Area">
+        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>These actions are destructive and cannot be undone.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {[
             {
-              label: 'Clear all monitored parts',
-              desc: 'Removes all parts from your monitoring list.',
+              label: 'Clear monitored parts list',
+              desc: 'Removes all imported BOM components from tracking.',
               loading: clearingParts,
               action: clearMonitoredParts,
-              confirmTitle: 'Clear all monitored parts?',
-              confirmDesc: "This will permanently delete every part from your monitoring list.",
+              confirmTitle: 'Are you absolutely sure?',
+              confirmDesc: "This will permanently clear all components currently being monitored.",
               confirmText: 'Yes, clear all parts',
               btnText: 'Clear parts',
             },
             {
-              label: 'Clear all alerts',
-              desc: 'Dismisses every alert in your alerts inbox.',
+              label: 'Clear alerts logs',
+              desc: 'Empties the active warning and alerts inbox.',
               loading: clearingAlerts,
               action: clearAlerts,
-              confirmTitle: 'Clear all alerts?',
-              confirmDesc: 'This will permanently delete all alerts.',
+              confirmTitle: 'Are you absolutely sure?',
+              confirmDesc: 'This will permanently remove all alerts.',
               confirmText: 'Yes, clear all alerts',
               btnText: 'Clear alerts',
             },
           ].map(item => (
-            <div key={item.label} className="flex items-center justify-between p-4 rounded-2xl border border-red-500/20 bg-red-500/5">
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 18px', borderRadius: 16, border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.04)' }}>
               <div>
-                <p className="text-sm font-medium text-on-surface">{item.label}</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+                <p style={{ fontSize: 13.5, fontWeight: 700, color: C.text, margin: 0 }}>{item.label}</p>
+                <p style={{ fontSize: 11.5, color: C.muted, margin: '2px 0 0' }}>{item.desc}</p>
               </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm"
-                    className="shrink-0 gap-1.5 rounded-2xl border-red-500/40 text-red-400 hover:bg-red-500/10"
+                    className="shrink-0 gap-1.5 rounded-2xl shadow-neu-raised-sm"
+                    style={{ border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: C.card }}
                     disabled={item.loading}>
                     {item.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                     {item.btnText}
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow }}>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>{item.confirmTitle}</AlertDialogTitle>
-                    <AlertDialogDescription>{item.confirmDesc}</AlertDialogDescription>
+                    <AlertDialogTitle style={{ color: C.text }}>{item.confirmTitle}</AlertDialogTitle>
+                    <AlertDialogDescription style={{ color: C.muted }}>{item.confirmDesc}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogCancel style={{ background: C.bg, border: `1.5px solid ${C.cardBorder}`, color: C.text }}>Cancel</AlertDialogCancel>
                     <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      style={{ background: '#ef4444', color: '#1c202a' }}
                       onClick={item.action}>
                       {item.confirmText}
                     </AlertDialogAction>

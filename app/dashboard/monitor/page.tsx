@@ -24,26 +24,31 @@ interface MonitoredPart {
 
 type FetchState = 'idle' | 'loading' | 'success' | 'error'
 
-// ─── Landing-page tokens (light) ─────────────────────────────────────────────
+// ─── Steel Gray + Sky Blue Tokens ─────────────────────────────────────────────
 const C = {
-  green:       '#1b7a52',
-  greenDark:   '#0a5c35',
-  greenSoft:   '#e8f7ef',
-  greenBorder: 'rgba(27,122,82,0.25)',
-  text:        '#071a10',
-  muted:       '#3e6b52',
-  mutedLight:  '#7aaa8e',
-  card:        '#ffffff',
-  cardBorder:  'rgba(10,34,24,0.08)',
-  cardShadow:  '0 2px 16px rgba(10,34,24,0.06)',
-  rowHover:    'rgba(27,122,82,0.03)',
-  divider:     '#f0f4f2',
-  warn:        '#7a4f0a',
-  warnSoft:    '#fef3e2',
-  warnBorder:  'rgba(217,119,6,0.3)',
-  danger:      '#7a1a0a',
-  dangerSoft:  '#fdecea',
-  dangerBorder:'rgba(248,113,113,0.3)',
+  bg:          '#1c202a',
+  sidebar:     '#232833',
+  green:       '#5ebcf8', // Sky Blue
+  sky:         '#5ebcf8',
+  greenDark:   '#7dd3fc',
+  greenSoft:   'rgba(94, 188, 248, 0.10)',
+  greenBorder: 'rgba(94, 188, 248, 0.25)',
+  text:        '#f1f5f9',
+  muted:       '#94a3b8',
+  mutedLight:  '#64748b',
+  card:        '#232833',
+  border:      '#2f3644',
+  cardBorder:  '#2f3644',
+  cardShadow:  '6px 6px 12px #12141a, -6px -6px 12px #2d3443',
+  shadowInner: 'inset 3px 3px 6px #12141a, inset -3px -3px 6px #2d3443',
+  divider:     '#2f3644',
+  rowHover:    'rgba(94, 188, 248, 0.03)',
+  warn:        '#fbbf24',
+  warnSoft:    'rgba(245, 158, 11, 0.12)',
+  warnBorder:  'rgba(245, 158, 11, 0.3)',
+  danger:      '#f87171',
+  dangerSoft:  'rgba(239, 68, 68, 0.12)',
+  dangerBorder:'rgba(239, 68, 68, 0.3)',
 }
 
 export default function DashboardMonitorPage() {
@@ -101,67 +106,68 @@ export default function DashboardMonitorPage() {
       {/* ── Page header ── */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>
-          <p style={{ fontSize: 11, fontWeight: 600, color: C.greenDark, letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 8 }}>
-            AI-Native Procurement
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.green, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>
+            AI-Native Sourcing Telemetry
           </p>
           <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: C.text, letterSpacing: '-1px', lineHeight: 1.1 }}>
-            Monitoring <span style={{ color: C.green }}>&amp;</span> Market Alerts
+            Monitoring <span style={{ color: C.green }}>&amp;</span> Telemetry
           </h1>
           <p style={{ marginTop: 6, fontSize: 14.5, color: C.muted, lineHeight: 1.6 }}>
-            Real-time volatility, component telemetry, and anomaly feeds.
+            Real-time supply chain volatility, component active status feeds, and market checks.
           </p>
         </div>
         <button
           onClick={fetchParts}
           disabled={isLoading}
-          className="flex items-center gap-2 text-sm font-semibold transition-all"
+          className="flex items-center gap-2 text-sm font-bold transition-all shadow-neu-raised-sm"
           style={{
-            background: C.greenSoft,
-            border: `1px solid ${C.greenBorder}`,
+            background: C.card,
+            border: `1.5px solid ${C.cardBorder}`,
             color: C.green,
             padding: '9px 20px',
             borderRadius: 50,
+            cursor: 'pointer'
           }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(27,122,82,0.18)'}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = C.greenSoft}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = C.greenSoft; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = C.card; }}
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
+          Telemetry Check
         </button>
       </div>
 
-      {/* ── Stat cards ── */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3 mb-8">
+      {/* ── Bento Grid Metric Cards (3 Columns) ── */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3 mb-8">
         {[
-          { label: 'Total Parts',      value: parts.length,  sub: 'Components tracked',    icon: <Eye className="w-4 h-4" style={{ color: C.green }} />,          accent: C.text },
-          { label: 'Active Monitors',  value: activeCount,   sub: 'Live monitoring now',   icon: <Package className="w-4 h-4" style={{ color: C.green }} />,       accent: C.green },
-          { label: 'Inactive',         value: inactiveCount, sub: 'Paused — not alerting', icon: <AlertTriangle className="w-4 h-4" style={{ color: C.warn }} />,  accent: C.warn },
+          { label: 'Total Components', value: parts.length,  sub: 'Active & paused parts', icon: <Eye className="w-4 h-4" style={{ color: C.green }} />,          accent: C.text },
+          { label: 'Active Monitors',  value: activeCount,   sub: 'Under live surveillance', icon: <Package className="w-4 h-4" style={{ color: C.green }} />,       accent: C.green },
+          { label: 'Paused Tracks',    value: inactiveCount, sub: 'Not generating alerts',   icon: <AlertTriangle className="w-4 h-4" style={{ color: C.warn }} />,  accent: C.warn },
         ].map(({ label, value, sub, icon, accent }) => (
-          <div key={label} style={{ background: C.card, border: `1px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 18, padding: 22 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+          <div key={label} style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 20, padding: 22 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
               {icon}
             </div>
-            <p style={{ fontSize: 11, fontWeight: 600, color: C.mutedLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 4 }}>{label}</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.mutedLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 }}>{label}</p>
             <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 30, fontWeight: 800, color: accent, letterSpacing: '-1px', lineHeight: 1 }}>
               {isLoading ? '—' : value}
             </p>
-            <p style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{sub}</p>
+            <p style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{sub}</p>
           </div>
         ))}
       </div>
 
-      {/* ── Main grid ── */}
+      {/* ── Main bento grid layout (2/3 Table + 1/3 AI Copilot) ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
-        {/* Table — 2/3 */}
+        {/* Telemetry Table Card — 2/3 Width */}
         <div className="lg:col-span-2 flex flex-col gap-4">
 
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>
-              Live Telemetry Feed
+            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: C.text }}>
+              Active Telemetry Feed
             </h2>
-            <div className="flex items-center gap-2 rounded-full px-4 py-2"
-              style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}`, width: 230 }}>
+            <div className="flex items-center gap-2 rounded-full px-4 py-2 shadow-neu-sunken-sm"
+              style={{ background: C.bg, border: `1px solid ${C.cardBorder}`, width: 240 }}>
               <Search className="w-4 h-4 shrink-0" style={{ color: C.mutedLight }} />
               <input
                 placeholder="Search MPN or name…"
@@ -174,41 +180,41 @@ export default function DashboardMonitorPage() {
             </div>
           </div>
 
-          {/* Table card */}
-          <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 18, overflow: 'hidden' }}>
+          {/* Table container */}
+          <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 24, overflow: 'hidden' }}>
 
             {isLoading && (
-              <div className="flex items-center justify-center gap-3 py-20" style={{ color: C.muted }}>
+              <div className="flex items-center justify-center gap-3 py-24" style={{ color: C.muted }}>
                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: C.green }} />
-                <span className="text-sm">Loading telemetry…</span>
+                <span className="text-sm font-semibold">Scanning telemetry arrays…</span>
               </div>
             )}
 
             {fetchState === 'error' && (
               <div className="flex flex-col items-center gap-3 px-6 py-20 text-center">
                 <AlertTriangle className="w-8 h-8" style={{ color: C.danger }} />
-                <p className="font-semibold" style={{ color: C.text }}>Failed to load parts</p>
+                <p className="font-bold text-lg" style={{ color: C.text }}>Telemetry Link Lost</p>
                 <p className="text-sm" style={{ color: C.muted }}>{errorMessage}</p>
-                <button onClick={fetchParts} className="flex items-center gap-2 text-sm font-semibold"
-                  style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}`, color: C.green, padding: '8px 18px', borderRadius: 50 }}>
-                  Try again
+                <button onClick={fetchParts} className="flex items-center gap-2 text-sm font-bold transition-all shadow-neu-raised-sm"
+                  style={{ background: C.bg, border: `1.5px solid ${C.cardBorder}`, color: C.green, padding: '9px 20px', borderRadius: 50, cursor: 'pointer' }}>
+                  Reconnect Feed
                 </button>
               </div>
             )}
 
             {fetchState === 'success' && parts.length === 0 && (
               <div className="flex flex-col items-center gap-4 px-6 py-20 text-center">
-                <div style={{ width: 52, height: 52, borderRadius: 14, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 16, background: C.greenSoft, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Package className="w-6 h-6" style={{ color: C.green }} />
                 </div>
                 <div>
-                  <p className="font-semibold" style={{ color: C.text }}>No components monitored yet</p>
-                  <p className="mt-1 text-sm" style={{ color: C.muted }}>Upload a BOM to start tracking.</p>
+                  <p className="font-bold text-lg" style={{ color: C.text }}>No monitored components found</p>
+                  <p className="mt-1 text-sm" style={{ color: C.muted }}>Upload a BOM CSV file to begin tracking active supply data.</p>
                 </div>
                 <Link href="/dashboard/chat">
-                  <button className="flex items-center gap-2 text-sm font-semibold"
-                    style={{ background: C.text, color: '#dff0e8', padding: '10px 22px', borderRadius: 50, border: `2.5px solid ${C.text}` }}>
-                    <Upload className="w-4 h-4" /> Upload BOM
+                  <button className="flex items-center gap-2 text-sm font-bold transition-all shadow-neu-raised-sm"
+                    style={{ background: C.green, color: C.bg, padding: '10px 24px', borderRadius: 50, border: 'none', cursor: 'pointer' }}>
+                    <Upload className="w-4 h-4" /> Import BOM
                   </button>
                 </Link>
               </div>
@@ -216,12 +222,12 @@ export default function DashboardMonitorPage() {
 
             {fetchState === 'success' && parts.length > 0 && (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse" style={{ fontSize: 13 }}>
                   <thead>
-                    <tr style={{ borderBottom: `1px solid ${C.divider}`, background: C.greenSoft }}>
-                      {['Date', 'MPN / Component', 'Qty', 'Metric', 'Status', ''].map(h => (
-                        <th key={h} className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider"
-                          style={{ color: C.muted, letterSpacing: '0.10em' }}>
+                    <tr style={{ borderBottom: `1px solid ${C.divider}`, background: C.bg }}>
+                      {['Imported', 'MPN / Component', 'Qty', 'Source', 'Status', ''].map(h => (
+                        <th key={h} className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider"
+                          style={{ color: C.muted, letterSpacing: '0.08em' }}>
                           {h}
                         </th>
                       ))}
@@ -231,7 +237,7 @@ export default function DashboardMonitorPage() {
                     {filtered.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-5 py-12 text-center text-sm" style={{ color: C.muted }}>
-                          No parts match &ldquo;{searchTerm}&rdquo;
+                          No parts matched your query.
                         </td>
                       </tr>
                     ) : filtered.map(part => (
@@ -241,26 +247,26 @@ export default function DashboardMonitorPage() {
                         onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = C.rowHover}
                         onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                       >
-                        <td className="px-5 py-4 font-mono text-sm" style={{ color: C.mutedLight }}>
+                        <td className="px-5 py-4 font-mono text-xs" style={{ color: C.mutedLight, fontWeight: 600 }}>
                           {new Date(part.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                         </td>
                         <td className="px-5 py-4">
-                          <p className="font-medium font-mono text-sm" style={{ color: C.text }}>{part.mpn}</p>
-                          <p className="text-xs mt-0.5" style={{ color: C.mutedLight }}>{part.part_name}</p>
+                          <p className="font-bold font-mono text-sm" style={{ color: C.text }}>{part.mpn}</p>
+                          <p className="text-xs mt-1" style={{ color: C.muted }}>{part.part_name || 'Generic Component'}</p>
                         </td>
-                        <td className="px-5 py-4 text-sm" style={{ color: C.muted }}>{part.quantity}</td>
-                        <td className="px-5 py-4 text-sm" style={{ color: C.muted }}>Live Stock</td>
+                        <td className="px-5 py-4 font-semibold" style={{ color: C.text }}>{part.quantity}</td>
+                        <td className="px-5 py-4 text-xs font-semibold" style={{ color: C.muted }}>OEM Secrets</td>
                         <td className="px-5 py-4">
                           {part.is_active ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-                              style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}`, color: C.greenDark }}>
-                              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.green }} />
-                              In Stock
+                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold"
+                              style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399' }}>
+                              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#10b981' }} />
+                              Monitoring
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-                              style={{ background: 'rgba(10,34,24,0.05)', border: `1px solid ${C.cardBorder}`, color: C.mutedLight }}>
-                              Inactive
+                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold"
+                              style={{ background: 'rgba(148, 163, 184, 0.12)', border: `1px solid ${C.cardBorder}`, color: C.muted }}>
+                              Paused
                             </span>
                           )}
                         </td>
@@ -269,53 +275,52 @@ export default function DashboardMonitorPage() {
                             <button
                               disabled={togglingId === part.id}
                               onClick={() => toggleActive(part)}
-                              title={part.is_active ? 'Deactivate' : 'Activate'}
-                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-                              style={{ color: part.is_active ? C.green : C.mutedLight }}
-                              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = C.greenSoft}
-                              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                              title={part.is_active ? 'Deactivate Monitor' : 'Activate Monitor'}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-neu-raised-sm"
+                              style={{ color: part.is_active ? C.green : C.muted, background: C.card, border: `1px solid ${C.cardBorder}` }}
+                              onMouseEnter={e => { if (!part.is_active) (e.currentTarget as HTMLElement).style.color = C.green; }}
+                              onMouseLeave={e => { if (!part.is_active) (e.currentTarget as HTMLElement).style.color = C.muted; }}
                             >
                               {togglingId === part.id
                                 ? <Loader2 className="w-4 h-4 animate-spin" />
-                                : part.is_active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                                : part.is_active ? <ToggleRight className="w-4.5 h-4.5" /> : <ToggleLeft className="w-4.5 h-4.5" />}
                             </button>
 
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <button
                                   disabled={deletingId === part.id}
-                                  title="Delete"
-                                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-                                  style={{ color: C.mutedLight }}
+                                  title="Delete Track"
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-neu-raised-sm"
+                                  style={{ color: C.muted, background: C.card, border: `1px solid ${C.cardBorder}` }}
                                   onMouseEnter={e => {
                                     (e.currentTarget as HTMLElement).style.background = C.dangerSoft;
                                     (e.currentTarget as HTMLElement).style.color = C.danger;
                                   }}
                                   onMouseLeave={e => {
-                                    (e.currentTarget as HTMLElement).style.background = 'transparent';
-                                    (e.currentTarget as HTMLElement).style.color = C.mutedLight;
+                                    (e.currentTarget as HTMLElement).style.background = C.card;
+                                    (e.currentTarget as HTMLElement).style.color = C.muted;
                                   }}
                                 >
                                   {deletingId === part.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                 </button>
                               </AlertDialogTrigger>
-                              <AlertDialogContent style={{ background: '#fff', border: `1px solid ${C.cardBorder}`, boxShadow: '0 8px 40px rgba(10,34,24,0.12)' }}>
+                              <AlertDialogContent style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow }}>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle style={{ color: C.text }}>Remove part?</AlertDialogTitle>
+                                  <AlertDialogTitle style={{ color: C.text }}>Remove telemetry track?</AlertDialogTitle>
                                   <AlertDialogDescription style={{ color: C.muted }}>
-                                    <span className="font-mono font-semibold" style={{ color: C.green }}>{part.mpn}</span>
-                                    {' '}will be removed from your monitored parts. This cannot be undone.
+                                    The part number <span className="font-mono font-bold" style={{ color: C.green }}>{part.mpn}</span> will be permanently deleted from monitoring list. This action cannot be reversed.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel style={{ background: C.greenSoft, border: `1px solid ${C.greenBorder}`, color: C.muted }}>
+                                  <AlertDialogCancel style={{ background: C.bg, border: `1.5px solid ${C.cardBorder}`, color: C.text }}>
                                     Cancel
                                   </AlertDialogCancel>
                                   <AlertDialogAction
                                     onClick={() => deletePart(part.id)}
-                                    style={{ background: C.dangerSoft, border: `1px solid ${C.dangerBorder}`, color: C.danger }}
+                                    style={{ background: '#ef4444', color: '#1c202a' }}
                                   >
-                                    Remove
+                                    Remove Part
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -331,62 +336,62 @@ export default function DashboardMonitorPage() {
           </div>
         </div>
 
-        {/* ── AI Copilot sidebar ── */}
-        <div className="flex flex-col gap-4">
-          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>
-            AI Copilot
+        {/* ── Sourcing AI Copilot sidebar — 1/3 Width ── */}
+        <div className="flex flex-col gap-5">
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: C.text }}>
+            Sourcing Agent
           </h2>
 
-          {/* Main card — matches landing page dark AI Copilot card */}
-          <div style={{ background: C.text, borderRadius: 18, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontSize: 12, color: C.mutedLight, marginBottom: 2 }}>AI Copilot</p>
+          {/* AI Copilot Panel */}
+          <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 24, padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.sky, letterSpacing: '1px', textTransform: 'uppercase', margin: 0 }}>AI Copilot Feed</p>
 
             {/* Risk message */}
-            <p style={{ fontSize: 13.5, color: '#dff0e8', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 13.5, color: C.text, lineHeight: 1.6, margin: 0 }}>
               {activeCount === 0
-                ? 'No active monitors. Enable parts to detect risks.'
-                : `${activeCount} part${activeCount !== 1 ? 's' : ''} under active surveillance. Anomaly detection running.`}
+                ? 'Passive monitoring active. Activate monitored component streams to initiate live anomaly scanning.'
+                : `${activeCount} telemetry component${activeCount !== 1 ? 's' : ''} under live AI supervision. Sourcing channels checked every 24 hours.`}
             </p>
 
             {inactiveCount > 0 && (
-              <p style={{ fontSize: 12.5, color: C.mutedLight, lineHeight: 1.5, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
-                {inactiveCount} inactive monitor{inactiveCount !== 1 ? 's' : ''} — re-enable to resume full telemetry coverage.
+              <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, borderTop: `1px solid ${C.border}`, paddingTop: 14, margin: 0 }}>
+                {inactiveCount} tracked part{inactiveCount !== 1 ? 's are' : ' is'} paused. Turn toggles on to reactivate alerts.
               </p>
             )}
 
             <button
               onClick={fetchParts}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 text-sm font-semibold transition-all"
-              style={{ background: C.green, color: '#fff', padding: '11px 0', borderRadius: 50, marginTop: 4, border: 'none' }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#0f5c3a'}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = C.green}
+              className="w-full flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-neu-raised-sm"
+              style={{ background: C.green, color: C.bg, padding: '11px 0', borderRadius: 50, marginTop: 6, border: 'none', cursor: 'pointer' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = C.greenDark; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = C.green; }}
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Run Telemetry Check
+              Run Sourcing Check
             </button>
           </div>
 
-          {/* Add via BOM */}
+          {/* Bento Add via BOM */}
           <Link href="/dashboard/chat" className="w-full">
-            <button className="w-full flex items-center justify-center gap-2 text-sm font-semibold transition-all"
-              style={{ background: 'transparent', border: `2.5px solid ${C.text}`, color: C.text, padding: '11px 0', borderRadius: 50 }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(7,26,16,0.05)'}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+            <button className="w-full flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-neu-raised-sm"
+              style={{ background: C.card, border: `1.5px solid ${C.border}`, color: C.sky, padding: '12px 0', borderRadius: 50, cursor: 'pointer' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = C.border; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = C.card; }}
             >
               <Upload className="w-4 h-4" />
-              Add Parts via BOM
+              Upload BOM CSV
             </button>
           </Link>
 
-          {/* Summary card */}
-          <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 18, padding: 20 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 14 }}>Monitor Summary</h3>
+          {/* Metric Summary Card */}
+          <div style={{ background: C.card, border: `1.5px solid ${C.cardBorder}`, boxShadow: C.cardShadow, borderRadius: 20, padding: 22 }}>
+            <h3 style={{ fontSize: 13.5, fontWeight: 800, color: C.text, marginBottom: 14 }}>Surveillance Summary</h3>
             <div className="flex flex-col gap-3">
               {[
-                { label: 'Total monitored', value: parts.length,  accent: C.text },
-                { label: 'Active alerts',   value: activeCount,   accent: C.green },
-                { label: 'Paused',          value: inactiveCount, accent: C.warn },
+                { label: 'Tracked parts', value: parts.length,  accent: C.text },
+                { label: 'Active check',   value: activeCount,   accent: C.green },
+                { label: 'Paused checks',  value: inactiveCount, accent: C.warn },
               ].map(({ label, value, accent }) => (
                 <div key={label} className="flex items-center justify-between">
                   <span style={{ fontSize: 13, color: C.muted }}>{label}</span>
@@ -395,12 +400,12 @@ export default function DashboardMonitorPage() {
               ))}
             </div>
 
-            {/* Stat strip — matching landing page */}
-            <div className="grid grid-cols-3 gap-2 text-center mt-5 pt-4" style={{ borderTop: `1px solid ${C.divider}` }}>
-              {[['140+', 'Distributors'], ['10+', 'Beta users'], ['98%', 'Risk coverage']].map(([num, lbl]) => (
+            {/* Sourcing details strip */}
+            <div className="grid grid-cols-3 gap-2 text-center mt-5 pt-4" style={{ borderTop: `1.5px solid ${C.divider}` }}>
+              {[['140+', 'Vendors'], ['10+', 'Users'], ['98%', 'Coverage']].map(([num, lbl]) => (
                 <div key={lbl}>
-                  <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: C.green, letterSpacing: '-0.5px' }}>{num}</p>
-                  <p style={{ fontSize: 10.5, color: C.mutedLight, marginTop: 1 }}>{lbl}</p>
+                  <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: C.green, letterSpacing: '-0.5px', margin: 0 }}>{num}</p>
+                  <p style={{ fontSize: 10, color: C.mutedLight, marginTop: 2, margin: 0, fontWeight: 700 }}>{lbl}</p>
                 </div>
               ))}
             </div>
