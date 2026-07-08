@@ -1,4 +1,4 @@
-# 🌐 OmniProcure
+# 🌐 OmniProcure 
 
 OmniProcure is an **AI-Native Electronics Procurement & Supply Chain Monitoring Platform** built to streamline component sourcing for hardware engineers and supply chain teams. By consolidating real-time distributor inventories, automating risk assessments, and leveraging an agentic LLM command center, OmniProcure cuts components sourcing and BOM analysis times from **hours to minutes**.
 
