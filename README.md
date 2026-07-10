@@ -10,7 +10,7 @@ The platform is designed to run entirely serverless inside a unified Next.js App
 1. [System Architecture](#-system-architecture)
 2. [User Flows & Usage Guide](#-user-flows--usage-guide)
 3. [Key Features](#-key-features)
-4. [Tech Stack & Integrations](#-tech-stack--integrations)
+4. [Tech Stack & Core Integrations](#-tech-stack--core-integrations)
 5. [Database Schema & Data Models](#-database-schema--data-models)
 6. [AI Sourcing & Decision Logic](#-ai-sourcing--decision-logic)
 7. [Environment Configuration](#-environment-configuration)
@@ -161,7 +161,7 @@ OmniProcure features a logical user onboarding and operation loop. Follow this g
 
 ---
 
-## 🛠️ Tech Stack & Integrations
+## 🛠️ Tech Stack & Core Integrations
 
 *   **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
 *   **Styling**: Custom CSS Neumorphic variables and utility classes ([glacier.css](file:///c:/Users/kunal/OneDrive/pineapple/OmniProcure/omniprocure/app/dashboard/glacier.css))
@@ -177,7 +177,7 @@ OmniProcure features a logical user onboarding and operation loop. Follow this g
 
 ## 📊 Database Schema & Data Models
 
-Execute the SQL definitions in the [migration.sql](file:///c:/Users/kunal/OneDrive/pineapple/OmniProcure/omniprocure/supabase/migration.sql) file inside your Supabase dashboard:
+Run the [migration.sql](file:///c:/Users/kunal/OneDrive/pineapple/OmniProcure/omniprocure/supabase/migration.sql) script in your Supabase SQL Editor. The database consists of:
 
 ```
                       +-------------------+
@@ -198,29 +198,41 @@ Execute the SQL definitions in the [migration.sql](file:///c:/Users/kunal/OneDri
 +----------------+      +---------------+      +---------------+
 ```
 
-### 1. `watchlist`
-Stores component MPNs tracked by specific users for automated inventory checks.
+### `search_cache`
+Caches supplier listings, Claude rankings, variant options, and equivalent ICs for normalized part numbers to minimize external API costs.
+*   `mpn_normalized` (TEXT, Primary Key)
+*   `results` (JSONB)
+*   `claude_recommendation` (JSONB)
+*   `variant_results` (JSONB)
+*   `equivalent_ics` (JSONB)
+*   `updated_at` (TIMESTAMPTZ)
+*   `hit_count` (INTEGER)
+
+### `watchlist`
+Stores component MPNs tracked by users for automated price/availability monitoring.
 *   `id` (BIGSERIAL, Primary Key)
 *   `mpn` (TEXT, Unique)
 *   `label` (TEXT)
 *   `alert_threshold_stock` (INTEGER, Default: 100)
+*   `alert_threshold_weeks` (INTEGER, Default: 8)
 *   `last_checked_at` (TIMESTAMPTZ)
 *   `last_alert_at` (TIMESTAMPTZ)
 *   `user_id` (UUID, Foreign Key)
 
-### 2. `alerts`
-Stores logged supply warnings triggered by automated runs or AI agents.
+### `alerts`
+Stores logged warnings flagged by automated checks or the AI chat interface.
 *   `id` (BIGSERIAL, Primary Key)
 *   `mpn` (TEXT)
-*   `urgency` (TEXT) — `low` | `medium` | `high`
+*   `urgency` (TEXT) - `low` | `medium` | `high`
 *   `summary` (TEXT)
-*   `recommendation` (TEXT) — `buy_now` | `watch` | `hold`
+*   `recommendation` (TEXT) - `buy_now` | `watch` | `hold`
 *   `is_read` (BOOLEAN, Default: false)
-*   `flagged_by` (TEXT) — `monitor` | `chat`
+*   `flagged_by` (TEXT) - `monitor` | `chat`
+*   `created_at` (TIMESTAMPTZ)
 *   `user_id` (UUID, Foreign Key)
 
-### 3. `audit_trail`
-An immutable ledger tracking pricing and routing choices for SOC 2 security compliance.
+### `audit_trail`
+An immutable log tracking actions, prices, and decisions, serving as a SOC 2 compliant record.
 *   `id` (BIGSERIAL, Primary Key)
 *   `action` (TEXT)
 *   `supplier` (TEXT)
@@ -228,14 +240,27 @@ An immutable ledger tracking pricing and routing choices for SOC 2 security comp
 *   `unit_price` (NUMERIC)
 *   `total_value` (NUMERIC)
 *   `decision` (TEXT)
-*   `details` (JSONB)
+*   `details` (TEXT - JSON formatted logs)
 *   `created_at` (TIMESTAMPTZ)
+
+### `bom_uploads`
+Archives previously uploaded Bill of Materials documents and their parsed outputs.
+*   `id` (BIGSERIAL, Primary Key)
+*   `filename` (TEXT)
+*   `line_items` (JSONB)
+*   `item_count` (INTEGER)
+*   `uploaded_at` (TIMESTAMPTZ)
+*   `user_id` (UUID, Foreign Key)
 
 ---
 
 ## 🧠 AI Sourcing & Decision Logic
 
-### 1. Supplier Scoring Metric
+### 1. Sourcing Aggregator
+*   **Currency Translation**: Convert non-USD prices (EUR, GBP, CAD, AUD, JPY, CNY) into USD using predefined exchange multipliers.
+*   **Packaging Suffix Normalization**: Matches package types (e.g. `PU` -> DIP, `AU` -> TQFP-32, `TR` -> Tape & Reel) to dynamically fetch and cross-reference component variants.
+
+### 2. Supplier Scoring Metric
 Supplier lists retrieved from OEM Secrets are sorted using a custom metric block:
 *   **Score 3**: Active pricing + In Stock.
 *   **Score 2**: Active pricing + Out of Stock.
@@ -243,67 +268,85 @@ Supplier lists retrieved from OEM Secrets are sorted using a custom metric block
 *   **Score 0**: No pricing + Out of Stock.
 *   *Sort Priority*: High Score -> Low Price -> High Available Stock.
 
-### 2. Suffix Replacements
+### 3. Suffix Replacements
 To scan package variants, base part numbers are matched against a suffix table:
 *   `T6` / `C8T6` -> LQFP-48
 *   `RBT6` -> LQFP-64
 *   `AU` -> TQFP-32 (SMD)
 *   `PU` / `N` -> DIP (Through-hole)
 
+### 4. Claude Evaluation Matrix
+*   Distributor recommendations are weighed by:
+    *   **Stock Availability (40%)**
+    *   **Unit Price (35%)**
+    *   **Lead Time & Reliability (25%)**
+*   Only suppliers offering transparent pricing and active stock are considered for recommendations.
+
+### 5. Immediate Alert Triggers
+The system immediately logs a **High/Medium Priority Alert** and sends Slack/Email webhooks if a part checks any of the following parameters:
+1.  **Single Source Dependency**: Only 1 distributor has active stock.
+2.  **Extended Lead Time**: Component lead times exceed 8 weeks.
+3.  **Low Available Stock**: Total stock across all distributors drops below 500 units.
+4.  **Stockout**: Zero stock available globally.
+5.  **No pricing**: Sourced part is only available "on request".
+
+---
+
+## 🚀 Getting Started & Local Development
+
+### 1. Clone the repository and install dependencies
+```bash
+cd omniprocure
+npm install
+```
+
+### 2. Run the development server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+### 3. Run a build check
+```bash
+npm run build
+```
+
 ---
 
 ## ⚙️ Environment Configuration
 
-Create a `.env` file in the root `omniprocure` directory matching this configuration:
+Create a `.env` file in the root directory. Use the template below:
 
 ```env
-# ── SUPABASE CREDENTIALS (Server Secret and Public)
+# ── SUPABASE CONFIGURATION (Public and Server Secret)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# ── API ACCESS KEYS
+# ── DISTRIBUTOR & AI KEYS
 OEM_SECRETS_API_KEY=your_oem_secrets_api_key
 ANTHROPIC_API_KEY=sk-ant-api03-...
 
-# ── LANGFUSE OBSERVAIBILITY (Traces & Metrics)
+# ── OBSERVABILITY (Langfuse)
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_HOST=https://cloud.langfuse.com
 NEXT_PUBLIC_LANGFUSE_DASHBOARD_URL=https://cloud.langfuse.com/project/...
 
-# ── NOTIFICATIONS & MAILS
+# ── ALERTS & WEBHOOKS
 NOTIFY_WEBHOOK_URL=https://hooks.slack.com/services/...
 RESEND_API_KEY=re_...
 
 # ── CRON SCHEDULER
-CRON_SECRET=omni-cron-secure-string-xyz123
+CRON_SECRET=your_secured_cron_trigger_string
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# ── OAUTH INTEGRATION (Optional for Gmail Watch)
+GOOGLE_OAUTH_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CLOUD_PROJECT_ID=your_gcp_project_id
+GMAIL_PUBSUB_TOPIC=gmail-ingest
 ```
 
 ---
-
-## 🛠️ Local Development Setup
-
-### 1. Install project dependencies
-Ensure you have Node.js v20+ installed, navigate to the `omniprocure` folder, and install packages:
-```bash
-npm install
-```
-
-### 2. Launch the local development server
-Start the dev server:
-```bash
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) inside your web browser.
-
-### 3. Build Verification
-To ensure all TypeScript definitions and App Router imports compile clean:
-```bash
-npm run build
-```
-The static compiler should complete page building with zero errors.
-
----
-*Developed and maintained by the OmniProcure Sourcing & Software Engineering teams.*
+*Created and maintained by the OmniProcure Sourcing & Hardware Engineering team.*
