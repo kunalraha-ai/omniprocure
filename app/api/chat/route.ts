@@ -333,7 +333,7 @@ export async function POST(req: NextRequest) {
       try {
         gen = trace?.generation({
           name: "claude-sonnet-chat",
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-5-20250929",
           input: currentMessages,
           startTime: new Date(),
         });
@@ -347,7 +347,7 @@ export async function POST(req: NextRequest) {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-5-20250929",
           max_tokens: 1024,
           system: `You are OmniProcure AI — an expert procurement assistant with live access to component stock data, supplier pricing, and the OmniProcure platform.
 
