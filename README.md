@@ -20,7 +20,7 @@ The platform is designed to run entirely serverless inside a unified Next.js App
 
 ## 🏗️ System Architecture
 
-OmniProcure consolidates user authentication, real-time inventory queries, AI model execution, database caching, Slack webhooks, and background cron schedules into a single nextjs codebase.
+OmniProcure consolidates user authentication, real-time inventory queries, AI model execution, database caching, and Slack webhooks into a single nextjs codebase.
 
 ```mermaid
 graph TD
@@ -47,7 +47,6 @@ graph TD
         Monitor_API[Monitor & Telemetry API / api/monitor/route.ts]:::backend
         Alerts_API[Alerts CRUD API / api/alerts/route.ts]:::backend
         Audit_API[Audit Logs API / api/audit/route.ts]:::backend
-        Cron_API[Cron Trigger Endpoint / api/cron/route.ts]:::backend
     end
 
     %% Supabase Data Layer
@@ -88,9 +87,6 @@ graph TD
     Monitor_API -->|Run Risk Assessments| Claude
     Monitor_API -->|Write warnings & audit trails| SupaDB
     Monitor_API -->|Send Slack/Email Notifications| Resend
-
-    Cron_API -->|Periodic Trigger check| Monitor_API
-    Cron_API -->|Renew Mail PubSub| SupaDB
 ```
 
 ---
@@ -336,9 +332,6 @@ NEXT_PUBLIC_LANGFUSE_DASHBOARD_URL=https://cloud.langfuse.com/project/...
 # ── ALERTS & WEBHOOKS
 NOTIFY_WEBHOOK_URL=https://hooks.slack.com/services/...
 RESEND_API_KEY=re_...
-
-# ── CRON SCHEDULER
-CRON_SECRET=your_secured_cron_trigger_string
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # ── OAUTH INTEGRATION (Optional for Gmail Watch)
